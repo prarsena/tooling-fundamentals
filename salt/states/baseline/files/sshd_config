@@ -1,0 +1,26 @@
+# Managed by Salt — do not edit manually.
+# Source: salt/states/baseline/files/sshd_config
+
+Port 22
+Protocol 2
+
+# Authentication
+PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys
+
+# Sessions
+MaxAuthTries 3
+ClientAliveInterval 300
+ClientAliveCountMax 2
+LoginGraceTime 30
+
+# Disable insecure features
+X11Forwarding no
+AllowTcpForwarding no
+GatewayPorts no
+PermitEmptyPasswords no
+
+# Use modern host key algorithms only
+HostKeyAlgorithms ssh-ed25519,rsa-sha2-512,rsa-sha2-256

@@ -1,0 +1,10 @@
+---
+# ansible/roles/common/handlers/main.yml
+# Handlers are triggered by `notify:` in tasks. They run once at the end
+# of a play, even if notified multiple times — ideal for service restarts.
+
+- name: Restart SSH
+  ansible.builtin.service:
+    name: "{{ 'ssh' if ansible_os_family == 'Debian' else 'sshd' }}"
+    state: restarted
+  become: true

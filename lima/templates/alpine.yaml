@@ -1,0 +1,177 @@
+# =============================================================================
+# Lima VM Template: Alpine Linux 3.21
+# =============================================================================
+#
+# Usage:
+#   limactl create --name=myalpine lima/templates/alpine.yaml
+#   limactl start myalpine
+#   limactl shell myalpine
+#
+# Alpine Linux is extremely minimal (~8MB base image), uses musl libc instead
+# of glibc, and busybox instead of GNU coreutils. Ideal for:
+#   - Minimal container testing environments
+#   - Low-resource VMs (works well with 512MB RAM)
+#   - Security-conscious environments (very small attack surface)
+#
+# NOT ideal for:
+#   - Software that assumes glibc (many pre-built binaries won't run)
+#   - Developer machines where you want standard GNU tools
+#
+# IMPORTANT: Alpine does not provide VZ-compatible cloud images. QEMU only.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# VM Type — QEMU REQUIRED for Alpine
+# -----------------------------------------------------------------------------
+# Alpine's cloud images do not support Apple's Virtualization Framework.
+# Always use qemu for Alpine.
+#
+# GOTCHA: Alpine images are very small and boot quickly, but QEMU emulation on
+#         Apple Silicon still adds overhead. For an Intel Mac, QEMU is native.
+vmType: "qemu"
+
+arch: "default"
+
+
+# -----------------------------------------------------------------------------
+# Disk Images
+# -----------------------------------------------------------------------------
+# Official Alpine cloud (virt/nocloud) images: https://dl-cdn.alpinelinux.org/alpine/
+# Use the "virt" edition — it's the minimal kernel build designed for VMs.
+# The "nocloud" images include cloud-init support needed for Lima.
+#
+# URL pattern: /alpine/v<major.minor>/releases/<arch>/alpine-virt-<ver>-<arch>.iso
+#
+# GOTCHA: Alpine cloud images are .qcow2 files under the "cloud" directory
+#         for Alpine 3.18+. Older releases used iso/img formats.
+#         The "virt" kernel is tuned for virtualization; don't use "lts" here.
+# GOTCHA: Alpine uses OpenRC, not systemd. Service management is different:
+#         rc-service <svc> start   instead of  systemctl start <svc>
+#         rc-update add <svc>      instead of  systemctl enable <svc>
+images:
+  # Alpine 3.21 — aarch64
+  - location: "https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/aarch64/alpine-virt-3.21.0-aarch64.iso"
+    arch: "aarch64"
+
+  # Alpine 3.21 — x86_64
+  - location: "https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/x86_64/alpine-virt-3.21.0-x86_64.iso"
+    arch: "x86_64"
+
+# NOTE: If the ISO variant doesn't work smoothly with Lima for your version,
+# try the qcow2 cloud images from: https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/cloud/
+
+
+# -----------------------------------------------------------------------------
+# Resources
+# -----------------------------------------------------------------------------
+# Alpine is tiny. 512MiB RAM is enough for minimal use.
+# Bump to 1-2GiB if you're compiling packages from source (apk requires it).
+cpus: 1
+memory: "512MiB"
+# memory: "1GiB"   # recommended if compiling packages
+disk: "8GiB"
+
+
+# -----------------------------------------------------------------------------
+# Networking
+# -----------------------------------------------------------------------------
+networks:
+  - lima: "shared"
+  # - lima: "user-v2"
+
+
+# -----------------------------------------------------------------------------
+# Mounts
+# -----------------------------------------------------------------------------
+# 9p is required with qemu. virtiofs is not available here.
+mounts:
+  - location: "~"
+    writable: false
+    mountType: "9p"
+
+  - location: "/tmp/lima"
+    writable: true
+    mountType: "9p"
+
+
+ssh:
+  localPort: 0
+  loadDotSSHPubKeys: true
+
+
+# -----------------------------------------------------------------------------
+# Provisioning
+# -----------------------------------------------------------------------------
+# Alpine uses:
+#   apk update           → refresh index
+#   apk upgrade          → upgrade all packages
+#   apk add <pkg>        → install
+#   apk del <pkg>        → remove
+#   apk search <term>    → search
+#
+# Package repo: https://pkgs.alpinelinux.org/packages
+#
+# musl libc gotchas:
+#   - Many pre-compiled Linux binaries assume glibc and WILL NOT run on Alpine.
+#     You must compile from source or find Alpine-specific packages.
+#   - Python, Go, Rust toolchains work fine (they compile statically or use musl).
+#   - glibc compatibility layer available via: apk add gcompat
+#
+# OpenRC (init system) gotchas:
+#   - NOT systemd. Commands are different (see above).
+#   - Services live in /etc/init.d/ and /etc/runlevels/
+#   - rc-status         → view service status
+#   - rc-service sshd status
+#   - rc-update add sshd default  → enable at boot in "default" runlevel
+#
+# GOTCHA: Alpine's cloud-init support is less mature than on Debian/Fedora.
+#         If provisioning seems stuck, check: cat /var/log/cloud-init-output.log
+# GOTCHA: Alpine does not ship sudo by default — it uses doas. Install sudo
+#         explicitly if your scripts expect it.
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux
+
+      # Update and upgrade
+      apk update
+      apk upgrade
+
+      # Install common tools
+      # Note: busybox provides many unix utils already; these are extras
+      apk add \
+        curl \
+        wget \
+        git \
+        vim \
+        htop \
+        jq \
+        bash \
+        bash-completion \
+        ca-certificates \
+        gnupg \
+        iproute2 \
+        net-tools \
+        sudo
+
+      # Alpine ships with ash by default; make bash available for scripts
+      # (Lima's provisioning uses bash if it exists)
+
+      # Allow wheel group to use sudo (Lima user is in wheel)
+      echo '%wheel ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/wheel
+
+  - mode: user
+    script: |
+      #!/bin/bash
+      set -eux
+      echo 'export EDITOR=vim' >> ~/.profile
+      echo 'alias ll="ls -la"' >> ~/.profile
+
+
+probes:
+  - script: |
+      #!/bin/bash
+      test -f /var/lib/cloud/instance/boot-finished
+    hint: "cloud-init not finished. Check /var/log/cloud-init-output.log"

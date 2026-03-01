@@ -1,0 +1,57 @@
+// tailscale-acl.hujson
+// Starter Tailscale ACL policy.
+// Apply via: Tailscale admin console → Access Controls → paste this file.
+// HuJSON (Human JSON) allows comments and trailing commas.
+// Reference: https://tailscale.com/kb/1018/acls/
+{
+  // -------------------------------------------------------------------------
+  // GROUPS
+  // Define logical groupings of users or devices.
+  // -------------------------------------------------------------------------
+  "groups": {
+    "group:admins":    ["admin@example.com"],
+    "group:engineers": ["engineer@example.com"],
+  },
+
+  // -------------------------------------------------------------------------
+  // HOSTS (optional short aliases for IP ranges or tags)
+  // -------------------------------------------------------------------------
+  "hosts": {
+    "dev-vm":     "100.64.0.0/10",  // All Tailscale IPs
+    "local-only": "192.168.0.0/16", // Local LAN
+  },
+
+  // -------------------------------------------------------------------------
+  // ACLs — who can reach what
+  // -------------------------------------------------------------------------
+  "acls": [
+    // Admins can reach everything on all ports.
+    {"action": "accept", "src": ["group:admins"], "dst": ["*:*"]},
+
+    // Engineers can SSH into any machine on port 22.
+    {"action": "accept", "src": ["group:engineers"], "dst": ["*:22"]},
+
+    // All peers can reach HTTPS services.
+    {"action": "accept", "src": ["*"], "dst": ["*:443"]},
+  ],
+
+  // -------------------------------------------------------------------------
+  // SSH rules (Tailscale SSH — requires SSH access enabled on the device)
+  // -------------------------------------------------------------------------
+  "ssh": [
+    {
+      "action":   "accept",
+      "src":      ["group:admins"],
+      "dst":      ["tag:server"],
+      "users":    ["autogroup:nonroot", "root"],
+    },
+  ],
+
+  // -------------------------------------------------------------------------
+  // TAGS — applied to devices to group them logically
+  // -------------------------------------------------------------------------
+  "tagOwners": {
+    "tag:server": ["group:admins"],
+    "tag:dev":    ["group:engineers"],
+  },
+}

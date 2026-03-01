@@ -1,0 +1,74 @@
+---
+# =============================================================================
+# ansible/roles/common/tasks/main.yml
+# Baseline tasks applied to every managed host.
+# =============================================================================
+
+- name: Update package cache (Debian/Ubuntu)
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600   # Only update if cache is older than 1 hour.
+  when: ansible_os_family == "Debian"
+  become: true
+  tags: [packages]
+
+- name: Update package cache (RedHat/Fedora)
+  ansible.builtin.dnf:
+    update_cache: true
+  when: ansible_os_family == "RedHat"
+  become: true
+  tags: [packages]
+
+- name: Install baseline packages
+  ansible.builtin.package:
+    name: "{{ common_baseline_packages }}"
+    state: present
+  become: true
+  tags: [packages]
+  # ansible.builtin.package is a cross-platform wrapper that calls apt, dnf,
+  # pacman, etc. based on the OS family detected in gather_facts.
+
+- name: Ensure SSH daemon is running and enabled
+  ansible.builtin.service:
+    name: "{{ 'ssh' if ansible_os_family == 'Debian' else 'sshd' }}"
+    state: started
+    enabled: true
+  become: true
+  tags: [ssh]
+  # Notify the restart handler only when config changes (see handlers/).
+
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+  become: true
+  tags: [system]
+  when: common_set_hostname | bool
+
+- name: Ensure /etc/hosts has an entry for this host
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: "^127.0.1.1"
+    line: "127.0.1.1   {{ inventory_hostname }}"
+    state: present
+  become: true
+  tags: [system]
+
+- name: Create common admin user
+  ansible.builtin.user:
+    name: "{{ common_admin_user }}"
+    shell: /bin/bash
+    groups: sudo
+    append: true
+    state: present
+  become: true
+  when: common_admin_user != ""
+  tags: [users]
+
+- name: Authorise SSH public key for admin user
+  ansible.posix.authorized_key:
+    user: "{{ common_admin_user }}"
+    key: "{{ common_admin_ssh_pubkey }}"
+    state: present
+  become: true
+  when: common_admin_ssh_pubkey != ""
+  tags: [users, ssh]

@@ -1,0 +1,182 @@
+# =============================================================================
+# Lima VM Template: Arch Linux (rolling release)
+# =============================================================================
+#
+# Usage:
+#   limactl create --name=myarch lima/templates/arch.yaml
+#   limactl start myarch
+#   limactl shell myarch
+#
+# Arch Linux is a rolling-release distro: packages are always the latest
+# upstream version. Great for development with cutting-edge toolchains.
+# Requires more manual configuration than Debian/Fedora/Ubuntu.
+#
+# IMPORTANT: Arch does not provide VZ-compatible cloud images. Use QEMU only.
+# IMPORTANT: Arch cloud images are maintained by the Arch project but may lag
+#            behind the rolling release by a few days. Always run `pacman -Syu`
+#            after first boot. The image URL below uses a rolling "latest" link.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# VM Type — QEMU REQUIRED for Arch
+# -----------------------------------------------------------------------------
+# Arch Linux cloud images do not ship a VZ-compatible kernel (no virtio-net
+# with a VZ-specific driver arrangement). QEMU is the only supported option.
+#
+# GOTCHA: Do NOT set vmType: vz for Arch — the VM will fail to boot or network
+#         will be broken.
+vmType: "qemu"
+
+arch: "default"
+
+
+# -----------------------------------------------------------------------------
+# Disk Images
+# -----------------------------------------------------------------------------
+# Official Arch Linux cloud images: https://geo.mirror.pkgbuild.com/images/latest/
+# The image URL is a "latest" redirect that always points to the current build.
+# There is no separate aarch64 cloud image from the Arch project as of 2025;
+# the x86_64 image is used for both (cross-arch on Apple Silicon via QEMU emulation,
+# which is slower — see note below).
+#
+# GOTCHA: Running x86_64 Arch on Apple Silicon via QEMU emulation is SLOW.
+#         Expect 5-10x slower than native. Good for testing x86-specific things,
+#         bad for daily development on an M-series Mac.
+# GOTCHA: There is no official aarch64 Arch cloud image. The Arch ARM project
+#         (https://archlinuxarm.org) provides aarch64 images but they require
+#         different setup (no cloud-init by default). Stick to x86_64 here.
+images:
+  - location: "https://geo.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2"
+    arch: "x86_64"
+    # Note: No SHA listed here because the "latest" URL always changes.
+    # Pin to a timestamped URL for reproducibility, e.g.:
+    # https://geo.mirror.pkgbuild.com/images/v20250201.267449/Arch-Linux-x86_64-cloudimg.qcow2
+
+
+# -----------------------------------------------------------------------------
+# Resources
+# -----------------------------------------------------------------------------
+# Arch base is very lean. 2GiB RAM is plenty for most use cases.
+cpus: 2
+memory: "2GiB"
+disk: "20GiB"
+
+
+# -----------------------------------------------------------------------------
+# Networking
+# -----------------------------------------------------------------------------
+# Same shared networking as other templates.
+# GOTCHA: With vmType: qemu, socket_vmnet still works for shared mode,
+#         but user-v2 is more reliable if you run into issues.
+networks:
+  - lima: "shared"
+  # - lima: "user-v2"   # fallback; simpler but no host→guest IP
+
+
+# -----------------------------------------------------------------------------
+# Mounts
+# -----------------------------------------------------------------------------
+# MUST use "9p" with vmType: qemu. virtiofs is vz-only.
+# GOTCHA: If you accidentally set mountType: virtiofs with qemu, the VM will
+#         fail to mount the directories and you'll see errors in /var/log/syslog.
+mounts:
+  - location: "~"
+    writable: false
+    mountType: "9p"
+
+  - location: "/tmp/lima"
+    writable: true
+    mountType: "9p"
+
+  # - location: "~/code"
+  #   writable: true
+  #   mountType: "9p"
+
+
+ssh:
+  localPort: 0
+  loadDotSSHPubKeys: true
+
+
+# Rosetta does NOT apply here — we're running x86_64 on qemu, not aarch64+vz.
+
+
+# -----------------------------------------------------------------------------
+# Provisioning
+# -----------------------------------------------------------------------------
+# Arch uses pacman as package manager. Key flags:
+#   pacman -Syu          → sync + full system upgrade (do this first)
+#   pacman -S <pkg>      → install package
+#   pacman -Rs <pkg>     → remove package + unused deps
+#   pacman -Qs <term>    → search installed packages
+#
+# AUR (Arch User Repository):
+#   Not available from pacman directly. Install an AUR helper like yay or paru
+#   as a non-root user. Never run AUR helpers as root.
+#
+# GOTCHA: Arch requires you initialize the keyring and trust the package signing
+#         keys before pacman will install anything. The cloud image ships with
+#         this pre-initialized, but keyring can get stale — see below.
+# GOTCHA: The cloud image uses "cloud-init" which may conflict with NetworkManager
+#         on some builds. If network is missing, check: systemctl status systemd-networkd
+# GOTCHA: Arch's rolling nature means you MUST run pacman -Syu regularly.
+#         Partial upgrades (installing a package without full upgrade) WILL
+#         break your system eventually. Always upgrade fully first.
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux
+
+      # Refresh package signing keys (prevents "invalid or corrupted package" errors)
+      pacman-key --populate archlinux
+      pacman-key --refresh-keys 2>/dev/null || true
+
+      # Full system upgrade — ALWAYS do this before installing anything on Arch
+      pacman -Syu --noconfirm
+
+      # Install common tools
+      pacman -S --noconfirm --needed \
+        curl \
+        wget \
+        git \
+        vim \
+        htop \
+        jq \
+        bash-completion \
+        net-tools \
+        iproute2 \
+        ca-certificates \
+        gnupg \
+        which \
+        man-db \
+        man-pages
+
+  # Uncomment to set up an AUR helper (must run as non-root user)
+  # - mode: user
+  #   script: |
+  #     #!/bin/bash
+  #     set -eux
+  #     # Install yay (AUR helper) from source
+  #     cd /tmp
+  #     git clone https://aur.archlinux.org/yay-bin.git
+  #     cd yay-bin
+  #     makepkg -si --noconfirm
+
+  - mode: user
+    script: |
+      #!/bin/bash
+      set -eux
+      echo 'export EDITOR=vim' >> ~/.bashrc
+      echo 'alias ll="ls -la"' >> ~/.bashrc
+      # Arch doesn't source bash_completion automatically in all setups
+      echo '[[ -f /usr/share/bash-completion/bash_completion ]] && source /usr/share/bash-completion/bash_completion' >> ~/.bashrc
+
+
+probes:
+  - script: |
+      #!/bin/bash
+      # Arch cloud images use cloud-init; check for its completion marker
+      test -f /var/lib/cloud/instance/boot-finished
+    hint: "cloud-init not finished. Check: sudo journalctl -u cloud-init"

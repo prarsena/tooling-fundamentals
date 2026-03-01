@@ -1,0 +1,262 @@
+# =============================================================================
+# Lima VM Template: Debian 12 (Bookworm)
+# =============================================================================
+#
+# Usage:
+#   limactl create --name=mydebian lima/templates/debian.yaml
+#   limactl start mydebian
+#   limactl shell mydebian
+#
+# Or with the management script:
+#   ./lima/scripts/vm.sh create debian mydebian
+#
+# Edit the values in this file before creating. Once a VM is created, most
+# settings (networks, mounts, provision) are locked in. You can change
+# cpus/memory by editing ~/.lima/<name>/lima.yaml and restarting.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# VM Type: qemu or vz
+# -----------------------------------------------------------------------------
+# vz  = Apple Virtualization Framework. macOS 13+ only. Much faster. Supports
+#       Rosetta. Debian 12+ ships a VZ-compatible kernel. RECOMMENDED on M-series.
+# qemu = Full emulation. Works on all Macs. Slower but more compatible.
+#        Required for cross-arch (x86 on arm64) or older/unusual kernels.
+#
+# GOTCHA: If you change vmType after creation you must delete and recreate.
+# GOTCHA: vz does not support firmware.legacyBIOS = true.
+vmType: "vz"
+# vmType: "qemu"   # ← uncomment for Intel Mac or cross-arch use
+
+
+# -----------------------------------------------------------------------------
+# Architecture
+# -----------------------------------------------------------------------------
+# "default" = use the host's architecture (recommended)
+# "x86_64"  = force x86, even on Apple Silicon (requires vmType: qemu, slow)
+# "aarch64" = force arm64
+arch: "default"
+
+
+# -----------------------------------------------------------------------------
+# Disk Images
+# -----------------------------------------------------------------------------
+# Lima tries each image in order, picking the first one that matches the arch.
+# Official Debian cloud images: https://cloud.debian.org/images/cloud/
+# The "genericcloud" variant is the right one for VMs (not the full ISO).
+#
+# SHA-256 digests are optional but strongly recommended — Lima will verify the
+# download. Get them from https://cloud.debian.org/images/cloud/bookworm/latest/SHA256SUMS
+#
+# GOTCHA: Do NOT use the "nocloud" variant without SHA verification in prod.
+# GOTCHA: Debian cloud images use "admin" or "debian" as the default user,
+#         but Lima overrides this with its own user via cloud-init. The lima
+#         user will match your macOS username.
+images:
+  # Debian 12 Bookworm — arm64 (for Apple Silicon / aarch64 hosts)
+  - location: "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.qcow2"
+    arch: "aarch64"
+    # digest: "sha256:<paste-hash-here>"   # recommended; get from SHA256SUMS file
+
+  # Debian 12 Bookworm — amd64 (for Intel Macs or forced x86_64)
+  - location: "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2"
+    arch: "x86_64"
+    # digest: "sha256:<paste-hash-here>"
+
+
+# -----------------------------------------------------------------------------
+# Resources
+# -----------------------------------------------------------------------------
+# cpus: virtual CPU count. 2 is a reasonable default. Max = host physical cores.
+# memory: RAM. GiB (gibibytes) or GB. Keep below ~50% of host RAM for stability.
+# disk: Root disk size. Minimum 10GiB; 20GiB is comfortable. Cannot shrink later.
+#       Grows on demand (thin provisioned). The host file is a qcow2/sparse file.
+#
+# GOTCHA: Over-allocating CPUs can hurt both host and guest performance.
+cpus: 2
+memory: "4GiB"
+disk: "20GiB"
+
+
+# -----------------------------------------------------------------------------
+# Networking
+# -----------------------------------------------------------------------------
+# See README.md for a full explanation. Short version:
+#
+# lima: user-v2  → NAT, guest→internet works, host CANNOT reach guest by IP.
+#                  Port-forward specific ports with portForwards below.
+# lima: shared   → Dedicated subnet, host CAN reach guest by IP (~192.168.105.x).
+#                  Requires: brew install socket_vmnet
+#                            limactl sudoers | sudo tee /etc/sudoers.d/lima
+# lima: bridged  → Guest on your LAN. Needs interface name (en0, en1, etc.).
+#
+# You can stack multiple networks. The first matching one wins for routing.
+# GOTCHA: socket_vmnet must be installed and the sudoers file written, or
+#         "shared" silently falls back to nothing / errors at start time.
+networks:
+  - lima: "shared"    # host can reach guest; guest can reach internet
+  # - lima: "user-v2"  # simpler, no host→guest IP, but always works
+
+
+# Port forwarding (most useful with user-v2 where you can't reach guest by IP).
+# With "shared" networking you usually don't need this — just hit the guest IP.
+# portForwards:
+#   - guestPort: 80
+#     hostPort: 8080
+#     # bind: "127.0.0.1"   # default; use "0.0.0.0" to expose on all host interfaces
+#   - guestPort: 5432        # postgres example
+#     hostPort: 5432
+
+
+# -----------------------------------------------------------------------------
+# Mounts (host directories inside the VM)
+# -----------------------------------------------------------------------------
+# By default Lima mounts your home dir read-only and /tmp/lima writable.
+# writable: true  → changes in the VM appear on the host (use carefully)
+# writable: false → read-only; safer for your host files
+#
+# mountType options:
+#   "virtiofs" → fast, low overhead. ONLY works with vmType: vz.
+#   "9p"       → works with both qemu and vz. Slower for heavy I/O.
+#   "sshfs"    → slowest; legacy option, avoid unless you need it.
+#   "reverse-sshfs" → host pushes to guest; only for special cases.
+#
+# GOTCHA: With vmType: vz, always use virtiofs. With qemu, use 9p.
+# GOTCHA: Heavy I/O workloads (npm install, cargo build) are painful over 9p.
+#         For those, work inside the VM disk, not a mounted directory.
+mounts:
+  - location: "~"
+    writable: false
+    mountType: "virtiofs"   # change to "9p" if using vmType: qemu
+
+  - location: "/tmp/lima"
+    writable: true
+    mountType: "virtiofs"   # change to "9p" if using vmType: qemu
+
+  # Example: mount a specific project directory writable
+  # - location: "~/code"
+  #   writable: true
+  #   mountType: "virtiofs"
+
+
+# -----------------------------------------------------------------------------
+# SSH
+# -----------------------------------------------------------------------------
+# localPort: 0 → Lima picks a free port automatically (recommended).
+#            Set a fixed port (e.g. 60022) if you want a stable ~/.ssh/config entry.
+# loadDotSSHPubKeys: true → copies all public keys from ~/.ssh/*.pub into the VM.
+#                    Set false if you want to control keys explicitly.
+ssh:
+  localPort: 0
+  loadDotSSHPubKeys: true
+
+
+# -----------------------------------------------------------------------------
+# Rosetta (Apple Silicon + vmType: vz only)
+# -----------------------------------------------------------------------------
+# Lets you run x86_64 Linux binaries inside an aarch64 guest transparently.
+# binfmt: true → registers Rosetta as the binfmt interpreter for x86 ELFs.
+# Useful for: Docker x86 images, x86-only tools, cross-compilation testing.
+# GOTCHA: Only works on Apple Silicon with vmType: vz. Ignored on Intel.
+#
+# rosetta:
+#   enabled: true
+#   binfmt: true
+
+
+# -----------------------------------------------------------------------------
+# Firmware
+# -----------------------------------------------------------------------------
+# legacyBIOS is QEMU-only. Do not set with vmType: vz.
+# Only needed for very old images that don't support UEFI.
+# firmware:
+#   legacyBIOS: false
+
+
+# -----------------------------------------------------------------------------
+# Provisioning (cloud-init)
+# -----------------------------------------------------------------------------
+# Runs scripts on first boot (mode: system or mode: user).
+# mode: "system" → root, runs once at first boot
+# mode: "user"   → your lima user, runs once at first boot
+# mode: "boot"   → root, runs on EVERY start (use for persistent services)
+#
+# GOTCHA: If provisioning fails silently, SSH won't be ready until cloud-init
+#         finishes. Check /var/log/cloud-init-output.log inside the guest.
+# GOTCHA: The script must be idempotent if using mode: "boot".
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux
+      # Update package lists
+      apt-get update -y
+      # Install common tools — customize this list
+      apt-get install -y \
+        curl \
+        wget \
+        git \
+        vim \
+        htop \
+        jq \
+        bash-completion \
+        ca-certificates \
+        gnupg \
+        lsb-release \
+        net-tools \
+        iproute2
+
+  # Uncomment to install Docker inside the Debian VM
+  # - mode: system
+  #   script: |
+  #     #!/bin/bash
+  #     set -eux
+  #     install -m 0755 -d /etc/apt/keyrings
+  #     curl -fsSL https://download.docker.com/linux/debian/gpg \
+  #       | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  #     chmod a+r /etc/apt/keyrings/docker.gpg
+  #     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  #       https://download.docker.com/linux/debian $(lsb_release -cs) stable" \
+  #       | tee /etc/apt/sources.list.d/docker.list > /dev/null
+  #     apt-get update -y
+  #     apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin
+  #     usermod -aG docker "$LIMA_CIDATA_USER"
+
+  - mode: user
+    script: |
+      #!/bin/bash
+      set -eux
+      # User-level setup — runs as your lima user (matches your macOS username)
+      echo 'export EDITOR=vim' >> ~/.bashrc
+      echo 'alias ll="ls -la"' >> ~/.bashrc
+
+
+# -----------------------------------------------------------------------------
+# Probes (readiness checks)
+# -----------------------------------------------------------------------------
+# Lima polls these after boot. If a probe fails repeatedly, limactl reports
+# the hint so you know what to debug.
+probes:
+  - script: |
+      #!/bin/bash
+      test -f /var/lib/cloud/instance/boot-finished
+    hint: "cloud-init has not finished yet. Check /var/log/cloud-init-output.log"
+
+
+# -----------------------------------------------------------------------------
+# Environment variables passed into the VM
+# -----------------------------------------------------------------------------
+# Injected into the lima user's shell environment.
+# env:
+#   MY_VAR: "hello"
+#   GOPATH: "/home/user/go"
+
+
+# -----------------------------------------------------------------------------
+# Host agent (lima-guestagent)
+# -----------------------------------------------------------------------------
+# Enables automatic port forwarding detection and other features.
+# Disable only if it causes problems.
+# hostResolver:
+#   enabled: true   # DNS resolver; disable if you manage /etc/resolv.conf yourself

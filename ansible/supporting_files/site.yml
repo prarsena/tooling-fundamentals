@@ -1,0 +1,25 @@
+---
+# =============================================================================
+# ansible/supporting_files/site.yml
+# Top-level playbook. Calls roles and task files for each host group.
+# Run with: ansible-playbook site.yml -i inventory.ini
+# =============================================================================
+
+- name: Configure all local VMs
+  hosts: local_vms
+  gather_facts: true        # Populate ansible_* variables (OS, arch, etc.)
+  become: false             # Override per-task or per-role as needed
+
+  # Roles are applied in order. Each role lives in roles/<name>/.
+  roles:
+    - role: common
+      tags: [common, baseline]
+
+- name: Configure cloud hosts
+  hosts: cloud
+  gather_facts: true
+  become: true              # Cloud instances typically need sudo for packages
+
+  roles:
+    - role: common
+      tags: [common, baseline]

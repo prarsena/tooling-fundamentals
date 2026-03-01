@@ -1,0 +1,24 @@
+---
+# kubernetes/manifests/namespace.yaml
+# Baseline namespaces for a standard cluster.
+# Apply with: kubectl apply -f manifests/namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ingress-nginx
+  labels:
+    app.kubernetes.io/managed-by: "devops-stack"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
+  labels:
+    app.kubernetes.io/managed-by: "devops-stack"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    app.kubernetes.io/managed-by: "devops-stack"

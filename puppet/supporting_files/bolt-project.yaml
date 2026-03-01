@@ -1,0 +1,46 @@
+# =============================================================================
+# puppet/supporting_files/bolt-project.yaml
+# Bolt project configuration.
+# Reference: https://www.puppet.com/docs/bolt/latest/bolt_project_reference.html
+# =============================================================================
+
+# The project name. Must be a valid Puppet module name (lowercase, underscores).
+name: devops_stack
+
+# Human-readable description shown in `bolt project show`.
+description: "DevOps Stack — Puppet Bolt project for macOS-based infra management"
+
+# ---------------------------------------------------------------------------
+# Modules to install from the Puppet Forge.
+# Run `bolt module install` to download and resolve dependencies.
+# Modules are cached in .modules/ within this directory.
+# ---------------------------------------------------------------------------
+modules:
+  # puppetlabs-stdlib: the Puppet standard library. Provides functions like
+  # `stdlib::ensure_packages`, `stdlib::validate_string`, etc.
+  - name: puppetlabs-stdlib
+    version_requirement: ">= 9.0.0 < 10.0.0"
+
+  # puppetlabs-facts: extended fact collection (virtual/cloud fact enrichment).
+  - name: puppetlabs-facts
+    version_requirement: ">= 1.0.0"
+
+# ---------------------------------------------------------------------------
+# Transport defaults (used when targets are specified without explicit config)
+# ---------------------------------------------------------------------------
+transport: ssh
+
+ssh:
+  # Do not verify SSH host keys — acceptable for local dev VMs.
+  # Remove this for any production or externally-accessible target.
+  host-key-check: false
+
+  # Private key to use for SSH authentication.
+  # Defaults to ~/.ssh/id_ed25519 or id_rsa. Override per-target in inventory.
+  private-key: ~/.ssh/id_ed25519
+
+# ---------------------------------------------------------------------------
+# Inventory (targets) — uses bolt-inventory.yaml or inline here.
+# For a static inventory, use a separate bolt-inventory.yaml file.
+# ---------------------------------------------------------------------------
+# inventory-config: bolt-inventory.yaml

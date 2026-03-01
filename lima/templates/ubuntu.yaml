@@ -1,0 +1,213 @@
+# =============================================================================
+# Lima VM Template: Ubuntu 24.04 LTS (Noble Numbat)
+# =============================================================================
+#
+# Usage:
+#   limactl create --name=myubuntu lima/templates/ubuntu.yaml
+#   limactl start myubuntu
+#   limactl shell myubuntu
+#
+# Ubuntu 24.04 LTS is the most well-tested distro with Lima — the Lima default
+# template targets Ubuntu. Most Lima documentation and examples assume Ubuntu.
+# LTS = Long Term Support: 5 years of security updates, until April 2029.
+#
+# Ubuntu 22.04+ and 23.10+ ship VZ-compatible kernels. 24.04 works great.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# VM Type
+# -----------------------------------------------------------------------------
+# Ubuntu 22.04+ fully supports both vz and qemu. Use vz on Apple Silicon.
+#
+# GOTCHA: Ubuntu 20.04 (Focal) does NOT support vmType: vz. Use qemu for it.
+vmType: "vz"
+# vmType: "qemu"
+
+arch: "default"
+
+
+# -----------------------------------------------------------------------------
+# Disk Images
+# -----------------------------------------------------------------------------
+# Official Ubuntu cloud images: https://cloud-images.ubuntu.com/
+# "minimal" images are smaller and boot faster; "server" images have more
+# pre-installed tools. The cloud variant is designed for cloud-init use.
+#
+# URL pattern: https://cloud-images.ubuntu.com/<codename>/current/<codename>-server-cloudimg-<arch>.img
+# The .img file is actually a qcow2; Lima handles it correctly.
+#
+# For daily images (latest build of the same release):
+#   https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-arm64.img
+#
+# GOTCHA: Use the .img (which is qcow2), not the .tar.gz or ISO variants.
+# GOTCHA: Ubuntu switched from "xenial/bionic/focal" to "jammy/lunar/mantic/noble"
+#         naming. noble = 24.04, jammy = 22.04, focal = 20.04.
+images:
+  # Ubuntu 24.04 LTS — arm64 (Apple Silicon)
+  - location: "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-arm64.img"
+    arch: "aarch64"
+
+  # Ubuntu 24.04 LTS — amd64 (Intel)
+  - location: "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
+    arch: "x86_64"
+
+  # Fallback: Ubuntu 22.04 LTS (Jammy) if 24.04 has issues
+  # - location: "https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-arm64.img"
+  #   arch: "aarch64"
+  # - location: "https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img"
+  #   arch: "x86_64"
+
+
+# -----------------------------------------------------------------------------
+# Resources
+# -----------------------------------------------------------------------------
+cpus: 2
+memory: "4GiB"
+disk: "25GiB"
+
+
+# -----------------------------------------------------------------------------
+# Networking
+# -----------------------------------------------------------------------------
+# See README.md for options. "shared" gives both internet and host→guest access.
+# Requires socket_vmnet + sudoers setup.
+networks:
+  - lima: "shared"
+  # - lima: "user-v2"
+
+
+# -----------------------------------------------------------------------------
+# Mounts
+# -----------------------------------------------------------------------------
+# virtiofs is fast with vmType: vz. Switch to "9p" for vmType: qemu.
+mounts:
+  - location: "~"
+    writable: false
+    mountType: "virtiofs"
+
+  - location: "/tmp/lima"
+    writable: true
+    mountType: "virtiofs"
+
+  # - location: "~/code"
+  #   writable: true
+  #   mountType: "virtiofs"
+
+
+ssh:
+  localPort: 0
+  loadDotSSHPubKeys: true
+
+
+# -----------------------------------------------------------------------------
+# Rosetta (Apple Silicon + vz only)
+# -----------------------------------------------------------------------------
+# Uncomment to enable x86 binary execution via Rosetta in the aarch64 guest.
+# Useful for Docker x86 images or x86-only tools.
+# rosetta:
+#   enabled: true
+#   binfmt: true
+
+
+# -----------------------------------------------------------------------------
+# Containerd / nerdctl (Lima's built-in container support)
+# -----------------------------------------------------------------------------
+# Lima can configure containerd and nerdctl automatically if you set:
+# containerd:
+#   system: false  # install system-wide (requires provision to install binaries)
+#   user: false    # install per-user
+#
+# For a Docker-compatible CLI via nerdctl:
+# containerd:
+#   system: true
+#   user: true
+# Then use: limactl shell myvm -- nerdctl run hello-world
+
+
+# -----------------------------------------------------------------------------
+# Provisioning
+# -----------------------------------------------------------------------------
+# Ubuntu uses apt, snap, and snap-refreshable packages. A few notes:
+#   - snapd is installed by default in Ubuntu cloud images
+#   - Use DEBIAN_FRONTEND=noninteractive to avoid interactive prompts
+#   - ubuntu-advantage-tools (ua) is pre-installed; it won't break things
+#
+# GOTCHA: "apt-get upgrade" in a provision script can take a while on first boot.
+#         apt update must run before any installs. The cloud image may not have
+#         a fully fresh package list.
+# GOTCHA: Some Ubuntu cloud images enable unattended-upgrades by default.
+#         This can conflict with your provision script's apt operations.
+#         Either wait for it, or disable it: systemctl disable unattended-upgrades
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux
+      export DEBIAN_FRONTEND=noninteractive
+
+      # Wait for any unattended-upgrades or cloud-init apt locks
+      # This prevents "Could not get lock /var/lib/dpkg/lock" errors
+      systemd-run --property="After=apt-daily.service apt-daily-upgrade.service" \
+        --wait /bin/true 2>/dev/null || true
+
+      apt-get update -y
+      apt-get upgrade -y
+
+      apt-get install -y \
+        curl \
+        wget \
+        git \
+        vim \
+        htop \
+        jq \
+        bash-completion \
+        ca-certificates \
+        gnupg \
+        lsb-release \
+        net-tools \
+        iproute2 \
+        build-essential \
+        software-properties-common
+
+  # Uncomment to install Docker on Ubuntu
+  # - mode: system
+  #   script: |
+  #     #!/bin/bash
+  #     set -eux
+  #     export DEBIAN_FRONTEND=noninteractive
+  #     install -m 0755 -d /etc/apt/keyrings
+  #     curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  #       | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  #     chmod a+r /etc/apt/keyrings/docker.gpg
+  #     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  #       https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
+  #       | tee /etc/apt/sources.list.d/docker.list
+  #     apt-get update -y
+  #     apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin
+  #     usermod -aG docker "$LIMA_CIDATA_USER"
+
+  # Uncomment to install a Go toolchain
+  # - mode: system
+  #   script: |
+  #     #!/bin/bash
+  #     set -eux
+  #     GOVERSION="1.23.5"
+  #     GOARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+  #     curl -fsSL "https://go.dev/dl/go${GOVERSION}.linux-${GOARCH}.tar.gz" \
+  #       | tar -C /usr/local -xz
+  #     echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile.d/go.sh
+
+  - mode: user
+    script: |
+      #!/bin/bash
+      set -eux
+      echo 'export EDITOR=vim' >> ~/.bashrc
+      echo 'alias ll="ls -la"' >> ~/.bashrc
+
+
+probes:
+  - script: |
+      #!/bin/bash
+      test -f /var/lib/cloud/instance/boot-finished
+    hint: "cloud-init not finished. Check /var/log/cloud-init-output.log"

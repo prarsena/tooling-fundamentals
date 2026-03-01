@@ -1,0 +1,45 @@
+# =============================================================================
+# salt/supporting_files/roster
+# salt-ssh target inventory (roster file).
+# Usage: salt-ssh --roster-file=supporting_files/roster '*' state.apply
+# Reference: https://docs.saltproject.io/en/latest/topics/ssh/roster.html
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# ROSTER FORMAT
+# Each entry is keyed by the minion ID (arbitrary name). Fields:
+#   host    — IP address or hostname
+#   user    — SSH user to connect as (default: root)
+#   port    — SSH port (default: 22)
+#   priv    — path to SSH private key (default: ~/.ssh/id_rsa)
+#   passwd  — SSH password (avoid this; use key auth instead)
+#   sudo    — whether to use sudo for commands (default: false)
+#   tty     — allocate a pseudo-TTY (needed for interactive sudo)
+# ---------------------------------------------------------------------------
+
+# Local Lima VM (Ubuntu) — Lima maps guest SSH to a localhost port.
+# Run `limactl list` to confirm the port number.
+# lima-ubuntu:
+#   host:   127.0.0.1
+#   user:   pete
+#   port:   60022
+#   priv:   ~/.ssh/id_ed25519
+#   sudo:   true
+#   tty:    true
+
+# Remote cloud instance example:
+# web01:
+#   host:   203.0.113.10
+#   user:   ubuntu
+#   port:   22
+#   priv:   ~/.ssh/cloud_key.pem
+#   sudo:   true
+#   tty:    true
+
+# Minimal localhost entry (for testing salt-ssh without a remote target).
+# Note: salt-ssh to localhost is less common than salt-call --local,
+# but useful for validating the roster workflow itself.
+localhost-test:
+  host:   127.0.0.1
+  user:   root
+  port:   22

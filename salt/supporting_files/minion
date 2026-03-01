@@ -1,0 +1,88 @@
+# =============================================================================
+# salt/supporting_files/minion
+# Salt minion configuration for masterless local execution.
+# Usage: salt-call --local --config-dir <path-to-this-directory> state.apply
+#
+# Reference: https://docs.saltproject.io/en/latest/ref/configuration/minion.html
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# MASTER (disabled for masterless mode)
+# In masterless mode, salt-call --local bypasses the master entirely.
+# Setting master to 'localhost' is the conventional no-op for local use.
+# ---------------------------------------------------------------------------
+master: localhost
+master_port: 4506
+
+# ---------------------------------------------------------------------------
+# IDENTITY
+# ---------------------------------------------------------------------------
+# id: the minion's unique identifier. Defaults to the hostname.
+# Uncomment and set explicitly if you need a stable, host-independent ID.
+# id: dev-macbook
+
+# ---------------------------------------------------------------------------
+# macOS-SPECIFIC PATHS
+# All paths below redirect Salt's default /var/ and /etc/ directories to
+# user-writable locations under ~/Library/ on macOS. This avoids needing
+# sudo for local development while following macOS path conventions:
+#
+#   ~/Library/Caches/    — regenerable data (ok to delete)
+#   ~/Library/Logs/      — application logs
+#   ~/Library/Application Support/ — persistent per-user app data
+# ---------------------------------------------------------------------------
+
+# cachedir: where Salt stores downloaded files, job results, and module cache.
+# Default on Linux: /var/cache/salt/minion
+cachedir: ~/Library/Caches/salt/minion
+
+# pki_dir: where Salt stores the minion's public/private key pair.
+# In masterless mode these keys are generated locally and never exchanged.
+# Default on Linux: /etc/salt/pki/minion
+pki_dir: ~/Library/Application Support/salt/pki/minion
+
+# log_file: Salt log output destination.
+# Default on Linux: /var/log/salt/minion
+log_file: ~/Library/Logs/salt/minion
+
+# log_level: verbosity of the log file (not stdout).
+# Options: quiet, critical, error, warning, info, profile, debug, trace, garbage
+log_level: warning
+
+# log_level_logfile: verbosity written to the log file (can differ from console).
+log_level_logfile: info
+
+# ---------------------------------------------------------------------------
+# FILE ROOTS
+# file_roots tells salt-call where to find state files (.sls).
+# The 'base' environment is the default; add 'staging', 'prod', etc. as needed.
+# ---------------------------------------------------------------------------
+file_roots:
+  base:
+    - ./states        # Relative to the config dir — salt/states/
+
+# ---------------------------------------------------------------------------
+# PILLAR ROOTS
+# pillar_roots is where Salt looks for Pillar data (encrypted/per-node vars).
+# Create salt/pillar/ and add your SLS files there.
+# ---------------------------------------------------------------------------
+# pillar_roots:
+#   base:
+#     - ./pillar
+
+# ---------------------------------------------------------------------------
+# GRAINS (node facts overrides)
+# You can override or add custom grains here. These are merged with facts
+# collected from the system.
+# ---------------------------------------------------------------------------
+# grains:
+#   environment: dev
+#   roles:
+#     - webserver
+
+# ---------------------------------------------------------------------------
+# RETURNERS
+# By default, job results are returned to stdout. For persistent storage,
+# configure a returner (local, sqlite, redis, etc.).
+# ---------------------------------------------------------------------------
+# return: local

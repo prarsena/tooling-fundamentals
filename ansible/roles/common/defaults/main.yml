@@ -1,0 +1,26 @@
+---
+# ansible/roles/common/defaults/main.yml
+# Default variable values for the common role.
+# Override these in group_vars/, host_vars/, or on the command line with -e.
+
+# Packages to install on every managed host.
+# The ansible.builtin.package module maps these to the correct package manager.
+common_baseline_packages:
+  - curl
+  - wget
+  - git
+  - vim
+  - htop
+  - unzip
+  - ca-certificates
+  - gnupg
+
+# Whether to set the hostname of the managed node to inventory_hostname.
+common_set_hostname: false
+
+# Admin user to create on each node. Leave empty ("") to skip user creation.
+common_admin_user: ""
+
+# SSH public key to authorise for the admin user.
+# Example: "ssh-ed25519 AAAAC3Nza... user@host"
+common_admin_ssh_pubkey: ""

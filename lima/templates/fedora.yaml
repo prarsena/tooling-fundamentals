@@ -1,0 +1,180 @@
+# =============================================================================
+# Lima VM Template: Fedora 41
+# =============================================================================
+#
+# Usage:
+#   limactl create --name=myfedora lima/templates/fedora.yaml
+#   limactl start myfedora
+#   limactl shell myfedora
+#
+# Fedora ships official cloud images and supports both vz and qemu. It tends
+# to have newer kernels and packages than Debian/Ubuntu. SELinux is enabled
+# by default (targeted policy) — see notes below.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# VM Type
+# -----------------------------------------------------------------------------
+# Fedora 37+ ships a VZ-compatible kernel. vz is safe to use here and is
+# recommended on Apple Silicon for performance.
+#
+# GOTCHA: Fedora updates frequently. If the cloud image breaks after a Fedora
+#         version bump, check: https://fedoraproject.org/cloud/download
+vmType: "vz"
+# vmType: "qemu"
+
+
+arch: "default"
+
+
+# -----------------------------------------------------------------------------
+# Disk Images
+# -----------------------------------------------------------------------------
+# Official Fedora cloud images: https://fedoraproject.org/cloud/download
+# Use the "Cloud Base" qcow2 image (not the raw or AMI variants).
+# Check https://download.fedoraproject.org/pub/fedora/linux/releases/ for
+# the latest release number and update the URLs below.
+#
+# GOTCHA: Fedora releases a new major version roughly every 6 months. Update
+#         the version number (currently 41) when a new one drops.
+# GOTCHA: The cloud image default user is "fedora", but Lima overrides this
+#         with your macOS username via cloud-init — you log in as yourself.
+images:
+  # Fedora 41 — aarch64 (Apple Silicon)
+  - location: "https://dl.fedoraproject.org/pub/fedora/linux/releases/41/Cloud/aarch64/images/Fedora-Cloud-Base-Generic-41-1.4.aarch64.qcow2"
+    arch: "aarch64"
+    # digest: "sha256:<hash>"   # get from the CHECKSUM file in the same directory
+
+  # Fedora 41 — x86_64
+  - location: "https://dl.fedoraproject.org/pub/fedora/linux/releases/41/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-41-1.4.x86_64.qcow2"
+    arch: "x86_64"
+    # digest: "sha256:<hash>"
+
+
+# -----------------------------------------------------------------------------
+# Resources
+# -----------------------------------------------------------------------------
+# Fedora is heavier than Alpine but lighter than Ubuntu with a full desktop.
+# 2 CPUs and 4GiB is comfortable for development.
+cpus: 2
+memory: "4GiB"
+disk: "25GiB"
+
+
+# -----------------------------------------------------------------------------
+# Networking
+# -----------------------------------------------------------------------------
+# Same as debian.yaml — see README.md for full explanation.
+# "shared" gives the host a direct IP to the guest and the guest internet access.
+# Requires: brew install socket_vmnet && limactl sudoers | sudo tee /etc/sudoers.d/lima
+networks:
+  - lima: "shared"
+  # - lima: "user-v2"   # fallback if socket_vmnet is not installed
+
+
+# -----------------------------------------------------------------------------
+# Mounts
+# -----------------------------------------------------------------------------
+# virtiofs is fast with vmType: vz. Switch to "9p" for vmType: qemu.
+mounts:
+  - location: "~"
+    writable: false
+    mountType: "virtiofs"
+
+  - location: "/tmp/lima"
+    writable: true
+    mountType: "virtiofs"
+
+  # - location: "~/code"
+  #   writable: true
+  #   mountType: "virtiofs"
+
+
+ssh:
+  localPort: 0
+  loadDotSSHPubKeys: true
+
+
+# Uncomment for Rosetta on Apple Silicon (vz only)
+# rosetta:
+#   enabled: true
+#   binfmt: true
+
+
+# -----------------------------------------------------------------------------
+# Provisioning
+# -----------------------------------------------------------------------------
+# Fedora uses dnf (Fedora 38 is switching to dnf5 by default — check version).
+# SELinux notes:
+#   - Fedora runs SELinux in "enforcing" mode by default (targeted policy).
+#   - Most things work fine, but custom services or odd file paths may get
+#     denied. Use `sudo ausearch -m avc -ts recent` to find denials.
+#   - DO NOT disable SELinux; instead, use audit2allow or set correct contexts.
+#   - To set permissive temporarily: `sudo setenforce 0` (does not persist).
+#
+# GOTCHA: dnf sometimes needs a moment on first boot for the rpm database.
+#         If provision scripts fail, they may succeed on a retry or re-provision.
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux
+
+      # Wait for dnf lock to be available (cloud-init can hold it briefly)
+      until dnf makecache --quiet; do
+        echo "Waiting for dnf lock..."
+        sleep 3
+      done
+
+      # Update all packages
+      dnf upgrade -y --quiet
+
+      # Install common tools
+      dnf install -y \
+        curl \
+        wget \
+        git \
+        vim \
+        htop \
+        jq \
+        bash-completion \
+        ca-certificates \
+        net-tools \
+        iproute \
+        gnupg2 \
+        findutils \
+        procps-ng
+
+  # Uncomment to install Docker on Fedora
+  # - mode: system
+  #   script: |
+  #     #!/bin/bash
+  #     set -eux
+  #     dnf install -y dnf-plugins-core
+  #     dnf config-manager addrepo \
+  #       --from-repofile=https://download.docker.com/linux/fedora/docker-ce.repo
+  #     dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin
+  #     systemctl enable --now docker
+  #     usermod -aG docker "$LIMA_CIDATA_USER"
+
+  - mode: user
+    script: |
+      #!/bin/bash
+      set -eux
+      echo 'export EDITOR=vim' >> ~/.bashrc
+      echo 'alias ll="ls -la"' >> ~/.bashrc
+
+
+probes:
+  - script: |
+      #!/bin/bash
+      test -f /var/lib/cloud/instance/boot-finished
+    hint: "cloud-init not finished. Check /var/log/cloud-init-output.log"
+
+  # Verify dnf completed without errors
+  - script: |
+      #!/bin/bash
+      systemctl is-system-running --quiet || \
+        systemctl is-system-running | grep -qE "^(running|degraded)"
+    hint: "systemd is not fully running yet"

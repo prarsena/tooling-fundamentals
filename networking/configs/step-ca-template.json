@@ -1,0 +1,18 @@
+{
+  "subject": {{ toJson .Subject }},
+  "sans": {{ toJson .SANs }},
+  "keyUsage": ["digitalSignature"],
+  "extKeyUsage": ["serverAuth", "clientAuth"],
+  "basicConstraints": {
+    "isCA": false
+  },
+  "notBefore": "now",
+  "notAfter": {{ toJson .Token.nbf | printf "%.0f" | add 86400 | toJson }},
+  "extensions": [
+    {
+      "id": "2.5.29.17",
+      "critical": false,
+      "value": {{ toJson .SANsExtension }}
+    }
+  ]
+}

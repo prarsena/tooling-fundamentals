@@ -1,0 +1,200 @@
+# =============================================================================
+# macos-base/supporting_files/Brewfile
+# Declarative list of all Homebrew packages for the DevOps stack.
+#
+# Install everything:  brew bundle --file=Brewfile
+# Check completeness:  brew bundle check --file=Brewfile
+# Dump current state:  brew bundle dump --file=Brewfile --force
+#
+# Reference: https://github.com/Homebrew/homebrew-bundle
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Taps (third-party Homebrew repositories)
+# ---------------------------------------------------------------------------
+tap "homebrew/bundle"
+tap "homebrew/cask"
+
+# ---------------------------------------------------------------------------
+# INFRASTRUCTURE & ORCHESTRATION
+# ---------------------------------------------------------------------------
+
+# OpenTofu — open-source Terraform fork (IaC).
+# Preferred over HashiCorp Terraform due to MPL/BSL licensing changes.
+brew "opentofu"
+
+# Helm — Kubernetes package manager.
+brew "helm"
+
+# k9s — terminal Kubernetes dashboard.
+brew "k9s"
+
+# kubectl — Kubernetes CLI. Reads ~/.kube/config.
+brew "kubectl"
+
+# Ansible — agentless configuration management over SSH.
+brew "ansible"
+
+# ansible-lint — lints Ansible playbooks for best-practice violations.
+brew "ansible-lint"
+
+# Chef Workstation — bundles chef, knife, cookstyle, test-kitchen.
+# Distributed as a Cask (.pkg installer to /opt/chef-workstation/).
+cask "chef-workstation"
+
+# Puppet Bolt — agentless Puppet runner over SSH (no minion daemon required).
+cask "puppet-bolt"
+
+# PDK (Puppet Development Kit) — scaffolds Puppet modules, runs unit tests.
+cask "pdk"
+
+# Salt — event-driven config management; includes salt-call and salt-ssh.
+brew "salt"
+
+# ---------------------------------------------------------------------------
+# CONTAINERS & VIRTUALISATION
+# ---------------------------------------------------------------------------
+
+# Lima — Linux VMs on macOS via QEMU. Backs the `lima/` directory.
+brew "lima"
+
+# Docker CLI — container commands without Docker Desktop.
+# Note: needs a container runtime (colima or lima with docker socket).
+brew "docker"
+
+# Colima — lightweight container runtime (alternative to Docker Desktop).
+brew "colima"
+
+# ---------------------------------------------------------------------------
+# NETWORKING & SECURITY
+# ---------------------------------------------------------------------------
+
+# step — CLI for step-ca (local Certificate Authority).
+brew "step"
+
+# step-ca — the CA server itself.
+brew "step-ca"
+
+# Tailscale — mesh VPN CLI.
+brew "tailscale"
+
+# doggo — modern DNS client (replaces dig with human-readable output).
+brew "doggo"
+
+# gping — visual, graph-based ping.
+brew "gping"
+
+# nmap — network scanning (port discovery, OS detection).
+brew "nmap"
+
+# mtr — combines ping + traceroute into a real-time network diagnostic.
+brew "mtr"
+
+# mkcert — zero-config mTLS certs for local development.
+# Creates a locally-trusted CA in ~/Library/Application Support/mkcert/.
+brew "mkcert"
+
+# Caddy — modern web server / local HTTPS reverse proxy.
+# Handles TLS automatically for public domains; use mkcert certs for .local.
+brew "caddy"
+
+# ngrok — instant secure tunnels to expose local services publicly.
+# Requires a (free) account: https://dashboard.ngrok.com
+# Tap-based install: ngrok is in its own Homebrew tap.
+tap "ngrok/ngrok"
+brew "ngrok/ngrok/ngrok"
+
+# cloudflared — Cloudflare Tunnel client + DNS-over-HTTPS proxy.
+brew "cloudflared"
+
+# bandwhich — real-time bandwidth utilisation by process and connection.
+# Requires sudo for raw socket access: sudo bandwhich
+brew "bandwhich"
+
+# trippy — next-generation traceroute/ping with a TUI.
+# Requires sudo for raw ICMP sockets: sudo trip <host>
+brew "trippy"
+
+# termshark — terminal Wireshark UI backed by tshark packet captures.
+# Requires tshark (installed by Wireshark). Needs sudo to capture.
+brew "termshark"
+
+# ---------------------------------------------------------------------------
+# SECRETS & DATA
+# ---------------------------------------------------------------------------
+
+# SOPS — encrypted secrets in Git (works with age and AWS KMS).
+brew "sops"
+
+# Age — modern file encryption; pairs with SOPS for local key management.
+brew "age"
+
+# jq — JSON processor. Essential for `terraform output -json | jq .`
+brew "jq"
+
+# yq — YAML processor (jq syntax for YAML/JSON/TOML).
+brew "yq"
+
+# ---------------------------------------------------------------------------
+# SHELL & TERMINAL PRODUCTIVITY
+# ---------------------------------------------------------------------------
+
+# ripgrep — faster grep written in Rust. Used in terminal workflows.
+brew "ripgrep"
+
+# fd — user-friendly `find` replacement.
+brew "fd"
+
+# bat — `cat` with syntax highlighting and Git integration.
+brew "bat"
+
+# fzf — fuzzy finder; enhances Ctrl-R history search in zsh.
+brew "fzf"
+
+# zoxide — smarter `cd`; learns your most-used directories.
+brew "zoxide"
+
+# starship — cross-shell prompt with context-aware segments (git, k8s, etc).
+brew "starship"
+
+# eza — modern replacement for `ls` (successor to `exa`).
+# NOTE: macOS ships BSD `ls` without --color support; eza fills this gap.
+brew "eza"
+
+# htop — interactive process viewer.
+brew "htop"
+
+# ---------------------------------------------------------------------------
+# DEVELOPER TOOLS
+# ---------------------------------------------------------------------------
+
+# git — version control. macOS ships an old Apple-patched version.
+brew "git"
+
+# gh — GitHub CLI for PRs, issues, and repo management.
+brew "gh"
+
+# direnv — per-directory environment variable management (.envrc files).
+brew "direnv"
+
+# pre-commit — framework for Git pre-commit hooks.
+brew "pre-commit"
+
+# shellcheck — static analysis for shell scripts (catch bugs before running).
+brew "shellcheck"
+
+# shfmt — shell script formatter.
+brew "shfmt"
+
+# ---------------------------------------------------------------------------
+# CASKS (GUI applications — optional)
+# ---------------------------------------------------------------------------
+
+# Ghostty — GPU-accelerated terminal emulator.
+# cask "ghostty"
+
+# WezTerm — GPU-accelerated terminal with Lua config.
+# cask "wezterm"
+
+# Visual Studio Code — code editor.
+# cask "visual-studio-code"

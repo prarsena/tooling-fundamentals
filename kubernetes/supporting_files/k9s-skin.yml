@@ -1,0 +1,88 @@
+# =============================================================================
+# kubernetes/supporting_files/k9s-skin.yml
+# k9s colour skin — Catppuccin Mocha inspired.
+# Install path on macOS: ~/Library/Application Support/k9s/skins/catppuccin.yml
+# Reference: https://k9scli.io/topics/skins/
+# =============================================================================
+
+# k9s skin name — referenced in config.yaml as `skin: catppuccin`
+name: catppuccin
+
+# ---------------------------------------------------------------------------
+# Foreground / background colours use hex notation.
+# k9s uses tcell's colour system; most 24-bit hex values are supported on
+# modern macOS Terminal, iTerm2, and Ghostty.
+# ---------------------------------------------------------------------------
+foreground: "#cdd6f4"  # Catppuccin text
+background: "#1e1e2e"  # Catppuccin base
+
+colors:
+  default:
+    # Main title bar
+    title:
+      fg: "#89b4fa"   # blue
+      bg: "#181825"   # mantle
+
+    # Menu / tab bar at the top
+    menu:
+      numeric:
+        fg: "#a6e3a1"  # green
+        bg: "#181825"
+      key:
+        fg: "#f38ba8"  # red
+        bg: "#181825"
+
+    # Status bar at the bottom
+    statusbar:
+      normal:
+        fg: "#cdd6f4"
+        bg: "#313244"  # surface0
+      completion:
+        fg: "#a6e3a1"
+        bg: "#313244"
+      filter:
+        fg: "#f9e2af"  # yellow
+        bg: "#313244"
+
+    # Resource table
+    table:
+      bg: "#1e1e2e"
+      fg: "#cdd6f4"
+      header:
+        fg: "#89dceb"  # sky
+        bg: "#181825"
+      cursor:
+        fg: "#1e1e2e"
+        bg: "#89b4fa"  # blue highlight
+
+    # Log viewer
+    logs:
+      bg: "#181825"
+      fg: "#cdd6f4"
+      time:
+        fg: "#6c7086"  # overlay0
+
+    # YAML / describe view
+    yaml:
+      key:
+        fg: "#89b4fa"
+        bg: "#1e1e2e"
+      value:
+        fg: "#a6e3a1"
+        bg: "#1e1e2e"
+      colon:
+        fg: "#6c7086"
+        bg: "#1e1e2e"
+
+    # Resource-state colour coding
+    info:
+      column:
+        fg: "#89dceb"
+      header:
+        fg: "#89b4fa"
+
+  # Pod-phase colours
+  ready:    "#a6e3a1"   # green  — Running / Ready
+  pending:  "#f9e2af"   # yellow — Pending
+  failed:   "#f38ba8"   # red    — Failed / CrashLoopBackOff
+  unknown:  "#cba6f7"   # mauve  — Unknown
