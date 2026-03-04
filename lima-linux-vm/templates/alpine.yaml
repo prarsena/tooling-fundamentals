@@ -85,14 +85,15 @@ networks:
 # Mounts
 # -----------------------------------------------------------------------------
 # 9p is required with qemu. virtiofs is not available here.
+mountType: "9p"
+
 mounts:
   - location: "~"
     writable: false
-    mountType: "9p"
 
-  - location: "/tmp/lima"
+  - location: "{{.GlobalTempDir}}/lima"
+    mountPoint: /tmp/lima
     writable: true
-    mountType: "9p"
 
 
 ssh:

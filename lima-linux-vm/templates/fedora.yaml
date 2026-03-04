@@ -77,18 +77,18 @@ networks:
 # Mounts
 # -----------------------------------------------------------------------------
 # virtiofs is fast with vmType: vz. Switch to "9p" for vmType: qemu.
+mountType: "virtiofs"   # change to "9p" if using vmType: qemu
+
 mounts:
   - location: "~"
     writable: false
-    mountType: "virtiofs"
 
-  - location: "/tmp/lima"
+  - location: "{{.GlobalTempDir}}/lima"
+    mountPoint: /tmp/lima
     writable: true
-    mountType: "virtiofs"
 
   # - location: "~/code"
   #   writable: true
-  #   mountType: "virtiofs"
 
 
 ssh:

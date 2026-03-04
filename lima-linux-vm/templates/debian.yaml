@@ -125,19 +125,19 @@ networks:
 # GOTCHA: With vmType: vz, always use virtiofs. With qemu, use 9p.
 # GOTCHA: Heavy I/O workloads (npm install, cargo build) are painful over 9p.
 #         For those, work inside the VM disk, not a mounted directory.
+mountType: "virtiofs"   # change to "9p" if using vmType: qemu
+
 mounts:
   - location: "~"
     writable: false
-    mountType: "virtiofs"   # change to "9p" if using vmType: qemu
 
-  - location: "/tmp/lima"
+  - location: "{{.GlobalTempDir}}/lima"
+    mountPoint: /tmp/lima
     writable: true
-    mountType: "virtiofs"   # change to "9p" if using vmType: qemu
 
   # Example: mount a specific project directory writable
   # - location: "~/code"
   #   writable: true
-  #   mountType: "virtiofs"
 
 
 # -----------------------------------------------------------------------------

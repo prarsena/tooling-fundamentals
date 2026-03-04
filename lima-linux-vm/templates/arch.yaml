@@ -80,18 +80,18 @@ networks:
 # MUST use "9p" with vmType: qemu. virtiofs is vz-only.
 # GOTCHA: If you accidentally set mountType: virtiofs with qemu, the VM will
 #         fail to mount the directories and you'll see errors in /var/log/syslog.
+mountType: "9p"
+
 mounts:
   - location: "~"
     writable: false
-    mountType: "9p"
 
-  - location: "/tmp/lima"
+  - location: "{{.GlobalTempDir}}/lima"
+    mountPoint: /tmp/lima
     writable: true
-    mountType: "9p"
 
   # - location: "~/code"
   #   writable: true
-  #   mountType: "9p"
 
 
 ssh:

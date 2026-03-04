@@ -9,18 +9,101 @@ Framework (VZ). It manages SSH keys, port forwarding, host mounts, and cloud-ini
 # Install lima and networking prerequisites
 brew install lima
 brew install socket_vmnet          # required for host<->guest networking
+
+# Lima requires socket_vmnet in a root-owned path (not Homebrew's user-writable prefix).
+# Copy it to /opt/socket_vmnet so Lima can safely invoke it via sudo:
+sudo mkdir -p /opt/socket_vmnet/bin
+sudo cp /opt/homebrew/opt/socket_vmnet/bin/socket_vmnet /opt/socket_vmnet/bin/socket_vmnet
+sudo chown -R root:wheel /opt/socket_vmnet
+sudo chmod 755 /opt/socket_vmnet/bin/socket_vmnet
+
 limactl sudoers | sudo tee /etc/sudoers.d/lima   # lets lima manage vmnet without sudo prompts
 
-# Create and start a VM
-limactl create --name=mydebian lima/templates/debian.yaml
-limactl start mydebian
+# --- Create & start ---
+limactl create --name=mydebian lima/templates/debian.yaml   # provision (does NOT start)
+limactl start mydebian                                      # boot the VM
 
-# Open a shell
-limactl shell mydebian
+# --- Use it ---
+limactl shell mydebian              # interactive shell (as your macOS user)
+limactl shell mydebian -- uname -a  # run a single command without an interactive shell
+limactl list                        # see all VMs and their status
+
+# --- Stop & restart ---
+limactl stop mydebian               # graceful shutdown (disk is preserved)
+limactl start mydebian              # start it again — picks up where it left off
+
+# --- Copy files ---
+limactl copy mydebian:/etc/os-release ./os-release   # guest → host
+limactl copy ./somefile mydebian:/tmp/somefile        # host → guest
+
+# --- Destroy ---
+limactl delete mydebian             # delete VM and all its data (irreversible)
+limactl delete --force mydebian     # force-delete even if still running
 
 # Or use the included management script
 ./lima/scripts/vm.sh create debian mydebian
 ./lima/scripts/vm.sh shell mydebian
+```
+
+---
+
+## Inside the VM
+
+### What you get when you run `limactl shell myvm`
+
+You land in a shell **as your macOS username** — Lima creates a matching user inside the
+guest automatically via cloud-init. The username is the same, passwordless `sudo` works
+out of the box:
+
+```bash
+limactl shell mydebian          # lands as pete (or whatever your macOS user is)
+sudo su -                       # become root — no password needed
+whoami                          # pete → then root
+```
+
+Sudo is pre-configured; there is no separate root password to set.
+
+### Where is the VM on disk?
+
+Everything for a VM lives at **`~/.lima/<name>/`** on the host:
+
+| File | What it is |
+|---|---|
+| `lima.yaml` | The config used at creation (snapshot of your template) |
+| `diffdisk` | The VM's writable disk image (qcow2) — all installed packages, files, etc. live here |
+| `basedisk` | The downloaded base image (read-only; shared if you create multiple VMs from the same image) |
+| `cidata.iso` | Cloud-init seed — generated once at creation, contains your user/SSH setup |
+| `*.pid`, `*.sock` | Runtime files — only present while running |
+
+The VM's entire Linux filesystem — `/`, `/etc`, `/home`, installed packages, everything —
+lives inside `diffdisk`. It is just a file on your Mac. Delete it and the VM is gone.
+
+### Your macOS home directory inside the VM
+
+By default the templates mount your macOS home read-only at the same path it has on the host:
+
+```bash
+# On the host your home is /Users/pete
+# Inside the VM:
+ls /Users/pete          # ← your macOS files, read-only
+ls ~                    # ← /home/pete.linux — the VM's own home for your user
+```
+
+Lima maps the host path verbatim, so `/Users/pete/code` on macOS is `/Users/pete/code`
+inside the VM. The guest home (`~`) is separate VM storage, not the same directory.
+
+`/tmp/lima` (mounted from `{{.GlobalTempDir}}/lima` on the host) is a convenient
+writable drop-zone for passing files between host and guest without needing `limactl copy`.
+
+### Quick orientation once inside
+
+```bash
+uname -a                # confirm you're in Linux
+df -h                   # see the VM disk and mounts
+ls /Users/$(whoami)     # your macOS home (read-only mount)
+ls ~                    # VM-local home directory
+sudo -i                 # root shell
+exit                    # back to your macOS terminal
 ```
 
 ---
@@ -124,11 +207,13 @@ limactl shell myvm -- hostname -I
 ## Mounts (Host Directories in the VM)
 
 ```yaml
+mountType: "virtiofs"   # top-level default; use "9p" for vmType: qemu
+
 mounts:
   - location: "~"               # your home directory, read-only
     writable: false
-    mountType: "9p"             # use virtiofs with vmType: vz for better performance
-  - location: "/tmp/lima"       # writable scratch space
+  - location: "{{.GlobalTempDir}}/lima"   # writable scratch space (Lima creates this dir)
+    mountPoint: /tmp/lima
     writable: true
     # sshfs and 9p are slower; virtiofs is fast but VZ only
 ```
