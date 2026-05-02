@@ -18,6 +18,10 @@ The VM is just a Linux machine; Docker runs exactly as it would on a real server
 | Lima VM + Docker Engine | Full Linux VM, you control everything | Inside the VM; can be forwarded | Medium |
 | apple/container | Micro-VM per container, Apple Silicon only | macOS-native API | Low for simple use |
 
+> **BSD guests:** Docker Engine requires a Linux kernel and does not run on FreeBSD or
+> OpenBSD. See the **BSD Guests** section below for BSD-specific alternatives (jails,
+> Podman via Linuxulator). The rest of this guide applies to Linux Lima VMs only.
+
 **Good reasons to use Lima + Docker Engine:**
 - You want exact parity with a Linux CI/CD or production environment.
 - You need a specific Docker Engine version or buildx plugin.
@@ -148,7 +152,61 @@ docker run --rm hello-world
 
 ---
 
-## Post-Install Pro-Tips
+### BSD Guests — Docker Does Not Apply
+
+**Docker Engine does not run on BSD.** Docker requires Linux kernel primitives
+(namespaces, cgroups, netfilter/iptables) that BSD kernels do not provide. If you are
+running a FreeBSD or OpenBSD Lima VM, this entire guide does not apply.
+
+BSD operating systems have their own isolation and containerization mechanisms:
+
+#### FreeBSD: Jails
+
+FreeBSD Jails are the OS-level isolation primitive that predates and inspired Linux
+containers. A jail is a constrained environment sharing the host kernel, with its own
+filesystem root, network stack, and process space.
+
+```sh
+# Create a simple jail (FreeBSD base installed in /jails/myjail)
+sudo jail -c path=/jails/myjail mount.devfs host.hostname=myjail ip4.addr=127.0.2.1 command=/bin/sh
+
+# Use ezjail or BastilleBSD for a higher-level jail management workflow:
+sudo pkg install -y bastille
+sudo bastille bootstrap 14.2-RELEASE
+sudo bastille create myjail 14.2-RELEASE 192.168.0.10
+sudo bastille start myjail
+sudo bastille console myjail
+```
+
+#### FreeBSD: Podman via Linuxulator (experimental)
+
+FreeBSD's Linux Binary Compatibility layer (Linuxulator) can run Linux ELF binaries
+natively. Podman (a daemonless Docker-compatible container runtime) has been ported to
+FreeBSD and can run Linux containers via this mechanism:
+
+```sh
+sudo pkg install -y podman
+sudo sysrc linux_enable="YES"
+sudo service linux start
+podman run --rm hello-world   # runs a Linux container on FreeBSD via Linuxulator
+```
+
+> This is considered experimental. Not all Docker images or features are supported.
+> For production container workloads on FreeBSD, Jails are the stable path.
+
+#### OpenBSD: No container runtime
+
+OpenBSD does not have a Docker or jail equivalent. Its security model uses
+`pledge(2)` and `unveil(2)` syscall filtering at the application level rather than
+OS-level namespace isolation. There is no container management tool analogous to Docker
+available on OpenBSD.
+
+For workloads requiring Linux containers, run a separate Linux Lima VM alongside your
+OpenBSD VM rather than attempting containers inside OpenBSD.
+
+---
+
+
 
 ### Forward the Docker socket to your macOS host
 

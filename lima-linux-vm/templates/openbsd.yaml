@@ -1,0 +1,214 @@
+# =============================================================================
+# Lima VM Template: OpenBSD 7.8 RELEASE
+# =============================================================================
+#
+# Usage (after obtaining a cloud-init-capable image — READ THE NOTE BELOW):
+#   limactl create --name=myopenbsd lima-linux-vm/templates/openbsd.yaml
+#   limactl start myopenbsd
+#   limactl shell myopenbsd
+#
+# Or with the management script:
+#   ./lima-linux-vm/scripts/vm.sh create openbsd myopenbsd
+#
+# =============================================================================
+# *** IMPORTANT — OpenBSD requires a cloud-init-capable image ***
+# =============================================================================
+#
+# Lima injects SSH keys and creates a matching guest user via cloud-init at
+# first boot. Without cloud-init in the image, `limactl shell` will hang
+# (Lima cannot log in) and provisioning scripts will not run.
+#
+# Official OpenBSD install media does NOT include cloud-init. You have two
+# options:
+#
+#   Option A — Community cloud image with cloud-init pre-installed
+#     (Recommended) Download a cloud-init-ready OpenBSD image. One source is:
+#       https://bsd-cloud-image.org/
+#     Point the `location:` field below at the downloaded .qcow2 file using
+#     the file:// scheme:
+#       location: "file:///Users/yourname/Downloads/openbsd-7.8-arm64.qcow2"
+#       arch: "aarch64"
+#     Refer to that project for current release availability and checksums.
+#
+#   Option B — Build your own image (advanced)
+#     Install OpenBSD inside QEMU manually, install the cloud-init port
+#     (pkg_add cloud-init), configure it, then point Lima at the resulting
+#     disk image via the file:// scheme. Cloud-init on OpenBSD uses
+#     /etc/cloud/cloud.cfg and processes cidata ISOs like Linux.
+#
+# =============================================================================
+# Differences from Linux and from FreeBSD/NetBSD:
+# =============================================================================
+#
+# OpenBSD is distinct from its BSD siblings in several user-facing ways:
+#
+#  - Package manager: pkg_add / pkg_info / pkg_delete (NOT `pkg` like FreeBSD,
+#    NOT pkgin like NetBSD; see package-managers.md for full syntax)
+#  - Flavored packages: vim installs as `vim--no_x11` to avoid X11 deps;
+#    packages with compile-time options use the -- flavor suffix
+#  - Init system: rcctl(8) and rc.conf.local (not systemd, not rc.d service):
+#      rcctl enable  sshd     # enable at boot
+#      rcctl start   sshd     # start now
+#      rcctl disable httpd    # disable at boot
+#      rcctl check   ntpd     # check status
+#  - Default shell: ksh (POSIX Korn shell); bash is available in packages
+#  - Mirror-based installs: PKG_PATH must be set to an OpenBSD mirror for
+#    pkg_add to work (cloud-init images usually pre-configure this)
+#  - Security philosophy: minimal attack surface, pledge(2) and unveil(2)
+#    syscall filtering, W^X enforced, and many features disabled by default
+#  - Read-mostly base: /usr is mounted from a separate partition in some
+#    configurations; packages always install to /usr/local
+#
+# NOTE: VZ (Apple Virtualization Framework) is NOT supported for BSD guests.
+#       QEMU is always required.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# VM Type — QEMU REQUIRED for OpenBSD
+# -----------------------------------------------------------------------------
+vmType: "qemu"
+
+# OpenBSD 7.x supports both amd64 (x86_64) and arm64 (aarch64). Community
+# cloud images are available for both architectures. Use "default" to pick
+# the host architecture automatically — arm64 on Apple Silicon for native
+# QEMU performance, x86_64 on Intel Macs.
+arch: "default"
+
+
+# -----------------------------------------------------------------------------
+# Disk Images
+# -----------------------------------------------------------------------------
+# FILL IN a cloud-init-capable image path/URL before creating this VM.
+# See the header note above for where to obtain suitable images.
+#
+# File path example (after downloading a community cloud image):
+#   - location: "file:///Users/yourname/Downloads/openbsd-7.8-arm64.qcow2"
+#     arch: "aarch64"
+#   - location: "file:///Users/yourname/Downloads/openbsd-7.8-amd64.qcow2"
+#     arch: "x86_64"
+#
+# Official install media (does NOT have cloud-init — for reference only):
+#   https://cdn.openbsd.org/pub/OpenBSD/7.8/amd64/install78.img
+#   https://cdn.openbsd.org/pub/OpenBSD/7.8/arm64/install78.img
+#
+# GOTCHA: Update the version (7.8) when a new RELEASE is published.
+#         OpenBSD releases approximately every 6 months (May and November).
+# GOTCHA: Lima will refuse to create the VM if images: is empty. Uncomment
+#         and fill in at least one entry before running limactl create.
+images:
+  # Uncomment and edit these entries after downloading a cloud-init image:
+  # - location: "file:///Users/yourname/Downloads/openbsd-7.8-arm64.qcow2"
+  #   arch: "aarch64"
+  # - location: "file:///Users/yourname/Downloads/openbsd-7.8-amd64.qcow2"
+  #   arch: "x86_64"
+
+
+# -----------------------------------------------------------------------------
+# Resources
+# -----------------------------------------------------------------------------
+# OpenBSD is extremely compact. The base system installs in under 1 GiB.
+# 1 GiB of RAM is comfortable; bump to 2 GiB when building ports from source.
+cpus: 1
+memory: "1GiB"
+disk: "10GiB"
+
+
+# -----------------------------------------------------------------------------
+# Networking
+# -----------------------------------------------------------------------------
+networks:
+  - lima: "shared"
+  # - lima: "user-v2"   # simpler fallback; no host→guest IP
+
+
+# -----------------------------------------------------------------------------
+# Mounts (host directories in the VM)
+# -----------------------------------------------------------------------------
+# MUST use "9p" with vmType: qemu.
+#
+# GOTCHA: OpenBSD's virtio-9p (Plan 9) driver support has historically been
+#         limited. If host directory mounts cause boot errors, remove or
+#         comment out the mounts section and switch to "user-v2" networking;
+#         use `limactl copy` for file transfers instead.
+mountType: "9p"
+
+mounts:
+  - location: "~"
+    writable: false
+
+  - location: "{{.GlobalTempDir}}/lima"
+    mountPoint: /tmp/lima
+    writable: true
+
+
+# -----------------------------------------------------------------------------
+# SSH
+# -----------------------------------------------------------------------------
+ssh:
+  localPort: 0
+  loadDotSSHPubKeys: true
+
+
+# -----------------------------------------------------------------------------
+# Provisioning (cloud-init)
+# -----------------------------------------------------------------------------
+# These scripts only run if your image has cloud-init installed (Option A or B
+# from the header). If using a manually configured image without cloud-init,
+# skip this section and configure the VM via `limactl shell` after first boot.
+#
+# Package installation notes:
+#   pkg_add -I <pkg>       # -I = non-interactive (no confirmation prompts)
+#   pkg_add -u             # update all installed packages
+#   pkg_delete <pkg>       # remove a package
+#
+# GOTCHA: PKG_PATH must point to an OpenBSD mirror for pkg_add to work.
+#   Cloud images typically pre-configure this. If not set, add:
+#     export PKG_PATH="https://cdn.openbsd.org/pub/OpenBSD/$(uname -r)/packages/$(uname -m)/"
+#
+# GOTCHA: OpenBSD package names use the -- syntax for flavors:
+#   vim--no_x11    (vim compiled without X11 dependencies)
+#   python3        (the metapackage — a specific version like python%3.11)
+#   Use `pkg_info -Q <term>` to search for available packages and flavors.
+#
+# GOTCHA: Use #!/bin/sh — OpenBSD's /bin/sh is a restricted POSIX shell,
+#         not bash. Install bash via pkg_add if needed.
+provision:
+  - mode: system
+    script: |
+      #!/bin/sh
+      set -eux
+      # Ensure PKG_PATH is set (cloud images usually pre-configure this)
+      export PKG_PATH="https://cdn.openbsd.org/pub/OpenBSD/$(uname -r)/packages/$(uname -m)/"
+      # Install common tools — customize this list
+      pkg_add -I \
+        curl \
+        git \
+        vim--no_x11 \
+        htop \
+        jq \
+        bash
+
+  # - mode: user
+  #   script: |
+  #     #!/bin/sh
+  #     set -eux
+  #     echo 'export EDITOR=vim' >> ~/.profile
+  #     echo 'alias ll="ls -la"' >> ~/.profile
+
+
+# -----------------------------------------------------------------------------
+# Probes (readiness checks)
+# -----------------------------------------------------------------------------
+probes:
+  - script: |
+      #!/bin/sh
+      test -f /var/lib/cloud/instance/boot-finished
+    hint: "cloud-init has not finished. If your image does not have cloud-init installed, remove this probe. See the template header for image requirements."
+
+
+# -----------------------------------------------------------------------------
+# Environment variables passed into the VM
+# -----------------------------------------------------------------------------
+# env:
+#   MY_VAR: "value"

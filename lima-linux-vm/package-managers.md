@@ -2,13 +2,15 @@
 
 Reference for the package managers used across the supported Lima VM templates. Each template maps to a specific distro and its native tooling.
 
-| Template      | Distro        | Package Manager |
-|---------------|---------------|-----------------|
-| `alpine.yaml` | Alpine Linux  | `apk`           |
-| `arch.yaml`   | Arch Linux    | `pacman`        |
-| `debian.yaml` | Debian        | `apt`           |
-| `fedora.yaml` | Fedora        | `dnf`           |
-| `ubuntu.yaml` | Ubuntu        | `apt`           |
+| Template        | Distro        | Package Manager                          |
+|-----------------|---------------|------------------------------------------|
+| `alpine.yaml`   | Alpine Linux  | `apk`                                    |
+| `arch.yaml`     | Arch Linux    | `pacman`                                 |
+| `debian.yaml`   | Debian        | `apt`                                    |
+| `fedora.yaml`   | Fedora        | `dnf`                                    |
+| `ubuntu.yaml`   | Ubuntu        | `apt`                                    |
+| `freebsd.yaml`  | FreeBSD       | `pkg` (NetBSD uses `pkgin` — see below)  |
+| `openbsd.yaml`  | OpenBSD       | `pkg_add` / `pkg_info` / `pkg_delete`    |
 
 ---
 
@@ -460,16 +462,226 @@ sudo dnf history undo <id>
 
 ## Quick Comparison
 
-| Operation              | apk                        | pacman                  | apt                        | dnf                        |
-|------------------------|----------------------------|-------------------------|----------------------------|----------------------------|
-| Update index           | `apk update`               | `pacman -Sy`            | `apt update`               | `dnf check-update`         |
-| Upgrade all            | `apk upgrade`              | `pacman -Syu`           | `apt upgrade`              | `dnf upgrade`              |
-| Install                | `apk add <pkg>`            | `pacman -S <pkg>`       | `apt install <pkg>`        | `dnf install <pkg>`        |
-| Remove                 | `apk del <pkg>`            | `pacman -R <pkg>`       | `apt remove <pkg>`         | `dnf remove <pkg>`         |
-| Remove + deps          | `apk del --purge <pkg>`    | `pacman -Rs <pkg>`      | `apt autoremove`           | `dnf autoremove`           |
-| Search                 | `apk search <term>`        | `pacman -Ss <term>`     | `apt search <term>`        | `dnf search <term>`        |
-| Package info           | `apk info <pkg>`           | `pacman -Si <pkg>`      | `apt show <pkg>`           | `dnf info <pkg>`           |
-| List installed         | `apk info`                 | `pacman -Q`             | `apt list --installed`     | `dnf list --installed`     |
-| Who owns file          | `apk info --who-owns <f>`  | `pacman -Qo <f>`        | `dpkg -S <f>`              | `rpm -qf <f>`              |
-| List package files     | `apk info -L <pkg>`        | `pacman -Ql <pkg>`      | `dpkg -L <pkg>`            | `rpm -ql <pkg>`            |
-| Clean cache            | `apk cache clean`          | `pacman -Sc`            | `apt clean`                | `dnf clean all`            |
+> **BSD note:** FreeBSD (`pkg`) and OpenBSD (`pkg_add`) columns are included below. NetBSD
+> uses `pkgin`, which wraps the same underlying `pkg_*` tools as OpenBSD with a more
+> apt-like interface; see the pkg section below.
+
+| Operation          | apk                        | pacman              | apt                    | dnf                    | pkg (FreeBSD)          | pkg_add (OpenBSD)     |
+|--------------------|----------------------------|---------------------|------------------------|------------------------|------------------------|-----------------------|
+| Update index       | `apk update`               | `pacman -Sy`        | `apt update`           | `dnf check-update`     | `pkg update`           | *(no local index)*    |
+| Upgrade all        | `apk upgrade`              | `pacman -Syu`       | `apt upgrade`          | `dnf upgrade`          | `pkg upgrade`          | `pkg_add -u`          |
+| Install            | `apk add <pkg>`            | `pacman -S <pkg>`   | `apt install <pkg>`    | `dnf install <pkg>`    | `pkg install <pkg>`    | `pkg_add <pkg>`       |
+| Remove             | `apk del <pkg>`            | `pacman -R <pkg>`   | `apt remove <pkg>`     | `dnf remove <pkg>`     | `pkg delete <pkg>`     | `pkg_delete <pkg>`    |
+| Remove + deps      | `apk del --purge <pkg>`    | `pacman -Rs <pkg>`  | `apt autoremove`       | `dnf autoremove`       | `pkg autoremove`       | `pkg_delete -a <pkg>` |
+| Search             | `apk search <term>`        | `pacman -Ss <term>` | `apt search <term>`    | `dnf search <term>`    | `pkg search <term>`    | `pkg_info -Q <term>`  |
+| Package info       | `apk info <pkg>`           | `pacman -Si <pkg>`  | `apt show <pkg>`       | `dnf info <pkg>`       | `pkg info <pkg>`       | `pkg_info <pkg>`      |
+| List installed     | `apk info`                 | `pacman -Q`         | `apt list --installed` | `dnf list --installed` | `pkg info`             | `pkg_info`            |
+| Who owns file      | `apk info --who-owns <f>`  | `pacman -Qo <f>`    | `dpkg -S <f>`          | `rpm -qf <f>`          | `pkg which <f>`        | `pkg_info -E <f>`     |
+| List package files | `apk info -L <pkg>`        | `pacman -Ql <pkg>`  | `dpkg -L <pkg>`        | `rpm -ql <pkg>`        | `pkg list <pkg>`       | `pkg_info -L <pkg>`   |
+| Clean cache        | `apk cache clean`          | `pacman -Sc`        | `apt clean`            | `dnf clean all`        | `pkg clean`            | *(no local cache)*    |
+
+---
+
+## pkg — FreeBSD (and NetBSD)
+
+FreeBSD uses `pkg` as its binary package manager. Commands require `sudo` for system-wide
+changes. Packages are fetched from FreeBSD's official repository.
+
+NetBSD uses `pkgin`, which wraps the lower-level `pkg_add`/`pkg_delete`/`pkg_info` tools
+with a convenience interface closer to `apt`. The commands below are for FreeBSD's `pkg`;
+NetBSD users can prefix most operations with `pkgin` instead (e.g. `pkgin install <pkg>`).
+
+### Bootstrap pkg (first run only — usually done in cloud images)
+
+```sh
+env ASSUME_ALWAYS_YES=yes pkg bootstrap -f
+```
+
+### Update the package catalog
+
+```sh
+sudo pkg update
+```
+
+### Upgrade all installed packages
+
+```sh
+sudo pkg upgrade
+```
+
+### Update catalog and upgrade in one step
+
+```sh
+sudo pkg update && sudo pkg upgrade
+```
+
+### Install a package
+
+```sh
+sudo pkg install <package>
+```
+
+### Install without confirmation
+
+```sh
+sudo pkg install -y <package>
+```
+
+### Remove a package
+
+```sh
+sudo pkg delete <package>
+```
+
+### Remove a package and its orphaned dependencies
+
+```sh
+sudo pkg delete <package>
+sudo pkg autoremove
+```
+
+### Search for a package
+
+```sh
+pkg search <term>
+```
+
+### Show detailed information about a package
+
+```sh
+pkg info <package>
+```
+
+### List all installed packages
+
+```sh
+pkg info
+```
+
+### List files owned by an installed package
+
+```sh
+pkg list <package>
+```
+
+### Find which package owns a file
+
+```sh
+pkg which /path/to/file
+```
+
+### Check for outdated packages without upgrading
+
+```sh
+pkg version -l '<'
+```
+
+### Clean the local package cache
+
+```sh
+sudo pkg clean
+```
+
+### Audit installed packages for known vulnerabilities
+
+```sh
+sudo pkg audit -F
+```
+
+> **NetBSD pkgin equivalent commands:**
+> `pkgin install`, `pkgin upgrade`, `pkgin remove`, `pkgin search`, `pkgin show`, `pkgin list`
+
+---
+
+## pkg_add — OpenBSD
+
+OpenBSD uses a trio of tools: `pkg_add` (install/update), `pkg_delete` (remove), and
+`pkg_info` (query). There is no separate "update index" step — `pkg_add` queries the
+mirror at install/update time.
+
+### Set the package mirror path (required if not set by cloud-init)
+
+```sh
+export PKG_PATH="https://cdn.openbsd.org/pub/OpenBSD/$(uname -r)/packages/$(uname -m)/"
+```
+
+Add this to `~/.profile` to make it permanent.
+
+### Install a package
+
+```sh
+pkg_add <package>
+```
+
+### Install non-interactively
+
+```sh
+pkg_add -I <package>
+```
+
+### Update all installed packages
+
+```sh
+pkg_add -u
+```
+
+### Update a specific package
+
+```sh
+pkg_add -u <package>
+```
+
+### Remove a package
+
+```sh
+pkg_delete <package>
+```
+
+### Remove a package and any packages that depended solely on it
+
+```sh
+pkg_delete -a <package>
+```
+
+### Search for a package
+
+```sh
+pkg_info -Q <term>
+```
+
+### Show information about an installed package
+
+```sh
+pkg_info <package>
+```
+
+### List all installed packages
+
+```sh
+pkg_info
+```
+
+### List files owned by a package
+
+```sh
+pkg_info -L <package>
+```
+
+### Find which package provides a file
+
+```sh
+pkg_info -E /path/to/file
+```
+
+### OpenBSD package flavors
+
+OpenBSD packages support multiple compile-time variants called "flavors", indicated by `--`:
+
+```sh
+pkg_add vim--no_x11      # vim without X11 dependencies
+pkg_add python%3.11      # specific version of Python
+pkg_info -Q vim          # search and see available flavors
+```
+
+> **Note:** OpenBSD has no local package cache to clean — packages are downloaded and
+> immediately installed. There is no equivalent of `apt clean` or `pkg clean`.

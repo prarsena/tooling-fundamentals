@@ -20,8 +20,8 @@ sudo chmod 755 /opt/socket_vmnet/bin/socket_vmnet
 limactl sudoers | sudo tee /etc/sudoers.d/lima   # lets lima manage vmnet without sudo prompts
 
 # --- Create & start ---
-limactl create --name=mydebian lima/templates/debian.yaml   # provision (does NOT start)
-limactl start mydebian                                      # boot the VM
+limactl create --name=mydebian lima-linux-vm/templates/debian.yaml   # provision (does NOT start)
+limactl start mydebian                                               # boot the VM
 
 # --- Use it ---
 limactl shell mydebian              # interactive shell (as your macOS user)
@@ -41,8 +41,8 @@ limactl delete mydebian             # delete VM and all its data (irreversible)
 limactl delete --force mydebian     # force-delete even if still running
 
 # Or use the included management script
-./lima/scripts/vm.sh create debian mydebian
-./lima/scripts/vm.sh shell mydebian
+./lima-linux-vm/scripts/vm.sh create debian mydebian
+./lima-linux-vm/scripts/vm.sh shell mydebian
 ```
 
 ---
@@ -364,3 +364,72 @@ The SSH port is ephemeral and auto-assigned (unless you fix it with `ssh.localPo
 | `templates/arch.yaml` | Arch Linux | qemu | Rolling release, qemu only |
 | `templates/alpine.yaml` | Alpine 3.21 | qemu | Minimal, fast boot |
 | `templates/ubuntu.yaml` | Ubuntu 24.04 LTS | vz (qemu fallback) | Most Lima examples target this |
+| `templates/freebsd.yaml` | FreeBSD 14.2 RELEASE | qemu | BSD init (rc.d), `pkg`, jails, ZFS available; see BSD Guests below |
+| `templates/openbsd.yaml` | OpenBSD 7.8 RELEASE | qemu | Requires cloud-init image (see template); `pkg_add`; security-focused |
+
+---
+
+## BSD Guests
+
+### Key differences from Linux guests
+
+BSD operating systems share Unix heritage with Linux but differ in several important ways once you're inside the VM:
+
+| Feature | Linux (Debian/Ubuntu/Fedora/Arch) | FreeBSD / NetBSD | OpenBSD |
+|---|---|---|---|
+| Init system | systemd | rc.d (`sysrc`, `service`) | rc.d (`rcctl`) |
+| Package manager | apt, dnf, pacman, apk | `pkg` (FreeBSD), `pkgin` (NetBSD) | `pkg_add` |
+| Default shell | bash | sh / tcsh (bash installable) | ksh (bash installable) |
+| vmType | vz or qemu | **qemu only** | **qemu only** |
+| cloud-init | Built into official images | Built into official cloud images | **Requires community/custom image** |
+
+### VZ is not supported for BSD
+
+Apple's Virtualization Framework requires guest kernel support for its specific virtio
+interfaces. BSD kernels do not ship those drivers. Always use `vmType: qemu` for BSD.
+
+### FreeBSD and NetBSD are very similar for Lima purposes
+
+Both use QEMU, both ship cloud-init-capable cloud images, and both use the BSD rc.d init
+system. The `freebsd.yaml` template applies to FreeBSD directly; for NetBSD, swap the
+image URLs and replace `pkg` with `pkgin`. See the template header for details.
+
+### OpenBSD requires a cloud-init-capable image
+
+Official OpenBSD install media does not include cloud-init. Lima cannot inject SSH keys
+or create your user without it. Before using `openbsd.yaml` you must obtain a
+cloud-init-ready image — either from the community (e.g. https://bsd-cloud-image.org/)
+or by building your own. The template header explains both approaches.
+
+### Service management on BSD
+
+```bash
+# FreeBSD / NetBSD (rc.d via service/sysrc)
+sysrc sshd_enable="YES"       # enable sshd at boot
+service sshd start            # start it now
+service sshd status           # check status
+
+# OpenBSD (rcctl)
+rcctl enable  sshd            # enable at boot
+rcctl start   sshd            # start now
+rcctl disable httpd           # disable at boot
+rcctl check   ntpd            # check status
+```
+
+### Package management on BSD (quick reference)
+
+```bash
+# FreeBSD
+pkg install <name>            # install
+pkg upgrade                   # upgrade all
+pkg delete <name>             # remove
+pkg search <term>             # search
+
+# OpenBSD
+pkg_add <name>                # install
+pkg_add -u                    # upgrade all
+pkg_delete <name>             # remove
+pkg_info -Q <term>            # search
+```
+
+See [package-managers.md](package-managers.md) for complete reference.

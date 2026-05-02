@@ -1,0 +1,208 @@
+# =============================================================================
+# Lima VM Template: FreeBSD 14.2 RELEASE
+# =============================================================================
+#
+# Usage:
+#   limactl create --name=myfreebsd lima-linux-vm/templates/freebsd.yaml
+#   limactl start myfreebsd
+#   limactl shell myfreebsd
+#
+# Or with the management script:
+#   ./lima-linux-vm/scripts/vm.sh create freebsd myfreebsd
+#
+# FreeBSD is a complete Unix-derived OS with:
+#   - pkg: a fast binary package manager (not apt/dnf/pacman)
+#   - rc.d: BSD init system (no systemd; use sysrc/service instead)
+#   - Jails: lightweight OS-level virtualization (BSD's conceptual precursor to
+#     containers — runs isolated environments sharing a single kernel)
+#   - ZFS: advanced filesystem with snapshots, checksums, and compression
+#     (optional; base cloud images use UFS by default)
+#   - DTrace and Capsicum for advanced tracing and capability-mode sandboxing
+#
+# Relationship to NetBSD:
+#   NetBSD is structurally very similar to FreeBSD from a Lima perspective.
+#   Both require QEMU, both ship cloud-init-capable images, and both use the
+#   BSD rc.d init system and the `pkg_*` family of tools. The practical
+#   differences are the package manager (FreeBSD: `pkg`; NetBSD: `pkgin`,
+#   which wraps the underlying `pkg_add`/`pkg_info`/`pkg_delete` tools) and
+#   the available software ecosystem. If you want NetBSD, this template is a
+#   near drop-in — swap the image URLs for NetBSD cloud images from
+#   https://cdn.netbsd.org/ and replace `pkg` with `pkgin`. A separate
+#   template file is omitted because the YAML structure would be identical
+#   save for those two substitutions.
+#
+# NOTE: VZ (Apple Virtualization Framework) is NOT supported for BSD guests.
+#       QEMU is always required. See README.md — "BSD Guests" section.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# VM Type — QEMU REQUIRED for FreeBSD
+# -----------------------------------------------------------------------------
+# FreeBSD's kernel does not include the virtio drivers that Apple's
+# Virtualization Framework requires. QEMU is the only supported backend.
+#
+# GOTCHA: Do not set vmType: vz for FreeBSD — the VM will fail to boot.
+# GOTCHA: On Apple Silicon, use arch: "default" with the arm64 image for
+#         native-speed QEMU. Selecting the amd64 image on Apple Silicon runs
+#         x86_64 emulation — functional but noticeably slower.
+vmType: "qemu"
+
+arch: "default"
+
+
+# -----------------------------------------------------------------------------
+# Disk Images
+# -----------------------------------------------------------------------------
+# FreeBSD publishes official VM disk images (QCOW2, XZ-compressed) at:
+#   https://download.freebsd.org/releases/VM-IMAGES/
+#
+# The "Latest" symlink always resolves to the current patch level within a
+# major release. Lima decompresses .qcow2.xz images automatically.
+#
+# FreeBSD cloud images include the cloud-init port, which Lima uses to inject
+# your SSH public key and create a matching guest user at first boot. The guest
+# user will match your macOS username, same as Linux templates.
+#
+# GOTCHA: Update the version (14.2-RELEASE) when a new major/minor drops.
+#         See: https://download.freebsd.org/releases/VM-IMAGES/
+# GOTCHA: ZFS-based images exist as -ZFS.qcow2.xz variants if you prefer ZFS.
+#         The default cloud image uses UFS. ZFS requires slightly more RAM.
+# GOTCHA: FreeBSD's cloud-init default user is "freebsd" but Lima overrides
+#         this with your macOS username via its cidata cloud-init seed.
+images:
+  # FreeBSD 14.2 RELEASE — arm64 (Apple Silicon / aarch64 hosts)
+  - location: "https://download.freebsd.org/releases/VM-IMAGES/14.2-RELEASE/aarch64/Latest/FreeBSD-14.2-RELEASE-arm64-aarch64.qcow2.xz"
+    arch: "aarch64"
+    # digest: "sha256:<hash>"   # optional; check the SHA256 file in the same directory
+
+  # FreeBSD 14.2 RELEASE — amd64 (Intel Macs or forced x86_64)
+  - location: "https://download.freebsd.org/releases/VM-IMAGES/14.2-RELEASE/amd64/Latest/FreeBSD-14.2-RELEASE-amd64.qcow2.xz"
+    arch: "x86_64"
+    # digest: "sha256:<hash>"
+
+
+# -----------------------------------------------------------------------------
+# Resources
+# -----------------------------------------------------------------------------
+# FreeBSD is lean at rest (no desktop). 2 GiB RAM is comfortable for server
+# and development work. ZFS benefits from more RAM for its ARC read cache.
+#
+# GOTCHA: The disk value must be >= the image's virtual disk size. FreeBSD
+#         cloud images ship with a ~5 GiB virtual size but expand to fill the
+#         declared disk on first boot. 20 GiB is a comfortable working size.
+#         The disk cannot shrink after creation.
+cpus: 2
+memory: "2GiB"
+disk: "20GiB"
+
+
+# -----------------------------------------------------------------------------
+# Networking
+# -----------------------------------------------------------------------------
+# Same shared/user-v2 networking as the Linux templates. See README.md.
+# socket_vmnet works for FreeBSD guests in "shared" mode.
+networks:
+  - lima: "shared"
+  # - lima: "user-v2"   # simpler fallback; no host→guest IP
+
+
+# -----------------------------------------------------------------------------
+# Mounts (host directories in the VM)
+# -----------------------------------------------------------------------------
+# MUST use "9p" with vmType: qemu. virtiofs is VZ-only and unavailable here.
+#
+# GOTCHA: FreeBSD's Plan 9 (9p / VirtFS) driver is functional but heavy I/O
+#         workloads (compiling ports, large builds) will be slow over 9p. For
+#         those, work directly on the VM disk, not a Lima-mounted directory.
+# GOTCHA: Lima mounts your macOS home at the same absolute path inside
+#         FreeBSD (e.g. /Users/yourname). The path is unusual on BSD but the
+#         mount is created and accessible.
+mountType: "9p"
+
+mounts:
+  - location: "~"
+    writable: false
+
+  - location: "{{.GlobalTempDir}}/lima"
+    mountPoint: /tmp/lima
+    writable: true
+
+  # Example: mount a project directory writable
+  # - location: "~/code"
+  #   writable: true
+
+
+# -----------------------------------------------------------------------------
+# SSH
+# -----------------------------------------------------------------------------
+ssh:
+  localPort: 0
+  loadDotSSHPubKeys: true
+
+
+# -----------------------------------------------------------------------------
+# Provisioning (cloud-init)
+# -----------------------------------------------------------------------------
+# These scripts run once at first boot via cloud-init.
+# Use /bin/sh — FreeBSD's base system does not include bash.
+# The provision script below installs bash and common tools via pkg.
+#
+# Service management (rc.d, NOT systemd):
+#   Enable a service at boot:    sysrc <name>_enable="YES"
+#   Start a service immediately: service <name> start
+#   Check current status:        service <name> status
+#   One-liner start + enable:    sysrc <name>_enable="YES" && service <name> start
+#
+# GOTCHA: pkg bootstraps itself on first run. The line:
+#             env ASSUME_ALWAYS_YES=yes pkg bootstrap -f
+#         ensures this happens non-interactively. FreeBSD cloud images normally
+#         pre-bootstrap pkg, so this is a safe no-op if it's already done.
+# GOTCHA: If provisioning fails silently, check cloud-init logs at
+#         /var/log/cloud-init-output.log inside the guest.
+provision:
+  - mode: system
+    script: |
+      #!/bin/sh
+      set -eux
+      # Bootstrap pkg non-interactively (idempotent — safe to run again)
+      env ASSUME_ALWAYS_YES=yes pkg bootstrap -f || true
+      pkg update -y
+      # Install common tools — customize this list
+      pkg install -y \
+        curl \
+        wget \
+        git \
+        vim \
+        htop \
+        jq \
+        bash \
+        bash-completion \
+        ca_root_nss \
+        gnupg
+
+  - mode: user
+    script: |
+      #!/bin/sh
+      set -eux
+      # User-level setup — runs as your lima user (matches macOS username).
+      # FreeBSD uses ~/.profile for POSIX sh and ~/.bash_profile for bash.
+      echo 'export EDITOR=vim' >> ~/.profile
+      echo 'alias ll="ls -la"' >> ~/.profile
+
+
+# -----------------------------------------------------------------------------
+# Probes (readiness checks)
+# -----------------------------------------------------------------------------
+probes:
+  - script: |
+      #!/bin/sh
+      test -f /var/lib/cloud/instance/boot-finished
+    hint: "cloud-init has not finished. Check /var/log/cloud-init-output.log inside the VM."
+
+
+# -----------------------------------------------------------------------------
+# Environment variables passed into the VM
+# -----------------------------------------------------------------------------
+# env:
+#   MY_VAR: "value"

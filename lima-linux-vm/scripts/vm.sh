@@ -25,15 +25,17 @@
 #   prereqs                     Check/install prerequisites (socket_vmnet, etc.)
 #
 # Examples:
-#   ./lima/scripts/vm.sh prereqs
-#   ./lima/scripts/vm.sh create debian mydebian
-#   ./lima/scripts/vm.sh create ubuntu           # uses "ubuntu" as the name
-#   ./lima/scripts/vm.sh start mydebian
-#   ./lima/scripts/vm.sh shell mydebian
-#   ./lima/scripts/vm.sh shell mydebian -- htop
-#   ./lima/scripts/vm.sh ip mydebian
-#   ./lima/scripts/vm.sh backup mydebian ~/Backups
-#   ./lima/scripts/vm.sh delete mydebian
+#   ./lima-linux-vm/scripts/vm.sh prereqs
+#   ./lima-linux-vm/scripts/vm.sh create debian mydebian
+#   ./lima-linux-vm/scripts/vm.sh create ubuntu           # uses "ubuntu" as the name
+#   ./lima-linux-vm/scripts/vm.sh create freebsd myfreebsd
+#   ./lima-linux-vm/scripts/vm.sh create openbsd myopenbsd  # requires cloud-init image
+#   ./lima-linux-vm/scripts/vm.sh start mydebian
+#   ./lima-linux-vm/scripts/vm.sh shell mydebian
+#   ./lima-linux-vm/scripts/vm.sh shell mydebian -- htop
+#   ./lima-linux-vm/scripts/vm.sh ip mydebian
+#   ./lima-linux-vm/scripts/vm.sh backup mydebian ~/Backups
+#   ./lima-linux-vm/scripts/vm.sh delete mydebian
 #
 # =============================================================================
 
@@ -44,7 +46,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-TEMPLATES_DIR="$REPO_ROOT/lima/templates"
+TEMPLATES_DIR="$(cd "$SCRIPT_DIR/../templates" && pwd)"
 
 # Where Lima stores VM state. Rarely needs changing.
 LIMA_HOME="${LIMA_HOME:-$HOME/.lima}"
@@ -126,11 +128,11 @@ cmd_prereqs() {
     ok=false
   fi
 
-  # QEMU (needed for vmType: qemu templates)
+  # QEMU (needed for vmType: qemu templates — Alpine, Arch, and ALL BSD templates)
   if command -v qemu-system-x86_64 &>/dev/null || command -v qemu-system-aarch64 &>/dev/null; then
     success "QEMU installed"
   else
-    warn "QEMU not installed (needed for arch/alpine/intel-cross templates)"
+    warn "QEMU not installed (needed for arch/alpine/intel-cross templates and ALL BSD templates)"
     echo "  Install with: brew install qemu"
   fi
 
@@ -547,9 +549,11 @@ usage() {
   echo "Examples:"
   echo "  $0 prereqs"
   echo "  $0 create debian mydebian"
+  echo "  $0 create freebsd myfreebsd"
   echo "  $0 start mydebian"
   echo "  $0 shell mydebian"
   echo "  $0 shell mydebian -- sudo apt install -y neovim"
+  echo "  $0 shell myfreebsd -- sudo pkg install -y neovim"
   echo "  $0 ip mydebian"
   echo "  $0 backup mydebian ~/Backups"
   echo "  $0 delete mydebian"
